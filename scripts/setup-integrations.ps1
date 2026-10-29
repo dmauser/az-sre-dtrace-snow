@@ -125,7 +125,7 @@ function Get-ValidValue {
         }
         if (-not $value) {
             if ($Optional) { Write-Warn "$Key left empty"; return '' }
-            Write-Warn "$Key is required"; $asked = $true; continue
+            Write-Fail "$Key skipped; re-run this script to add it"; return $null
         }
         $err = & $Validate $value
         if (-not $err) { Set-EnvValue $Key $value; Save-EnvFile; return $value }
