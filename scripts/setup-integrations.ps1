@@ -388,7 +388,7 @@ if ($SkipServiceNow) {
         Write-Ok "Instance reachable: $base"
 
         $snowUser = Get-ValidValue -Key 'SNOW_ADMIN_USER' -Prompt 'ServiceNow admin user name' -Validate {
-            param($v) if ($v -match '\s') { 'User names have no spaces' } else { $null }
+            param($v) if ($v -match '\s|://|/') { 'Enter the user name (e.g. admin), not a URL' } else { $null }
         }
         if ($snowUser) {
             $snowPass = Get-ValidValue -Key 'SNOW_ADMIN_PASSWORD' -Prompt "Password for $snowUser" -Secret -Validate {
