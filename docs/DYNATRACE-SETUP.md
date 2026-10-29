@@ -82,8 +82,9 @@ workflow task until that user consents once per environment — this cannot be d
 
 1. Open **Workflows** (`https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.automations`).
 2. **Settings** (top right) → **Authorization settings**.
-3. Enable the **Primary permissions** (at minimum `app-engine:functions:run` and
-   `environment-api:credentials:read`) and save.
+3. Enable the **Primary permissions** and save. The workflow needs at least
+   `automation:workflows:read` (the task reads its own execution),
+   `app-engine:functions:run`, `environment-api:credentials:read` and `storage:events:read`.
 
 The deploy and `validate.sh` run the workflow once with a non-lab title (it exits before
 calling ServiceNow) and print these steps if the consent is missing.
@@ -119,6 +120,7 @@ can share one Dynatrace environment without paging each other's ServiceNow queue
 | No hosts in host group | OneAgent extension status: `az vm extension list ... --subscription <id>` |
 | MCP `initialize` 401/403 | platform token missing `mcp-gateway:*` scopes or expired |
 | `No schema with topic identifier 'builtin:anomaly-detection.metric-events'` | latest Dynatrace with an older checkout of this repo; pull and re-run — the mode is now detected |
+| Workflow execution: `Uncaught (in promise) 403: Forbidden` | a permission is missing from the authorization settings — usually `automation:workflows:read`; see the list above |
 | Deploy/validate: "has not been allowed to run workflows on your behalf" | do the one-time [authorization settings](#latest-dynatrace-allow-workflows-to-run-as-you-one-time) step |
 | Workflow execution: `credentialVault` 403 / credential not found | the workflow actor must be the API token's owner (credential is owner-only); create both tokens as the same user |
 | Workflow execution: fetch blocked / host not allowed | add the ServiceNow host under **Settings → General → External requests** |

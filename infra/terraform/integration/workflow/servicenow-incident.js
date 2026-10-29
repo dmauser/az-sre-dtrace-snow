@@ -17,10 +17,11 @@ const CONFIG = __CONFIG__;
 export default async function ({ execution_id }) {
   const ex = await execution(execution_id);
   // Event-triggered runs carry the problem; manual runs (the deploy smoke test)
-  // pass one in params.event instead.
+  // pass one in params.event instead. ex.event() is async and rejects (403/404)
+  // when the run has no trigger event, so it must be awaited inside the try.
   let problem;
   try {
-    problem = typeof ex.event === 'function' ? ex.event() : undefined;
+    problem = typeof ex.event === 'function' ? await ex.event() : undefined;
   } catch {
     problem = undefined;
   }

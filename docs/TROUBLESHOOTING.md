@@ -350,7 +350,8 @@ or installed by hand, re-run `deploy.sh`; the install is idempotent.
 **Latest Dynatrace (workflow).** Open **Workflows → `sre-demo-<suffix>-servicenow` →
 Executions**. "Please ensure Authorization Settings are configured" means the one-time consent
 is missing: **Workflows → Settings → Authorization settings**, enable the Primary permissions,
-save (see [DYNATRACE-SETUP.md](DYNATRACE-SETUP.md#latest-dynatrace-allow-workflows-to-run-as-you-one-time)).
+save. `403: Forbidden` means the consent is there but lacks a permission the task needs, usually
+`automation:workflows:read` (see [DYNATRACE-SETUP.md](DYNATRACE-SETUP.md#latest-dynatrace-allow-workflows-to-run-as-you-one-time)).
 `scripts/validate.sh` runs the same check. A blocked fetch means the ServiceNow host is missing
 from **Settings → General → External requests**; re-run `deploy.sh` to add it.
 

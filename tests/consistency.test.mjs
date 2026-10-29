@@ -475,6 +475,11 @@ test('the platform workflow only routes lab problems and raises the same inciden
   assert.match(js, /startsWith\(CONFIG\.titlePrefix/, 'the deploy smoke test relies on non-lab titles being skipped');
   assert.match(js, /credentialVaultClient\.getCredentialsDetails/, 'credentials must come from the vault, not the script');
   assert.ok(!/password\s*[:=]\s*['"]/.test(js), 'no literal password in the workflow script');
+  // ex.event() rejects with 403 on manual runs; un-awaited, that escapes the try as an
+  // unhandled rejection and fails the task before the title check (seen live).
+  for (const call of js.split('\n').filter((l) => /ex\.event\(\)/.test(l) && !l.trim().startsWith('//'))) {
+    assert.match(call, /await ex\.event\(\)/, `ex.event() must be awaited: ${call.trim()}`);
+  }
 });
 
 test('the workflow script is valid JavaScript once Terraform fills in CONFIG', () => {

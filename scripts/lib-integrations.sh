@@ -120,6 +120,10 @@ dt_allow_outbound_host() {
 # Runs the ServiceNow workflow once with a non-lab problem title: the task
 # loads, sees the title does not match and exits without calling ServiceNow.
 # Catches the one-time AutomationEngine consent that only the actor can give.
+# Permissions the workflow actor must grant under Workflows > Settings >
+# Authorization settings; servicenow-incident.js needs every one of them.
+DT_WORKFLOW_PERMISSIONS="automation:workflows:read, app-engine:functions:run, environment-api:credentials:read and storage:events:read"
+
 dt_workflow_smoke_test() {
   local wf_id="$1" tmp resp code body exec_id state info i
   tmp="$(mktemp)"; chmod 600 "${tmp}"
@@ -143,10 +147,16 @@ dt_workflow_smoke_test() {
   fi
   body="$(dt_platform_api GET "/platform/automation/v1/executions/${exec_id}/tasks" 2>/dev/null | _http_body)"
   info="$(jq -r '[.[]?.stateInfo // empty] | first // empty' <<<"${body}" 2>/dev/null)"
-  if [[ "${info}" == *"Authorization Settings"* ]]; then
-    warn "Dynatrace has not been allowed to run workflows on your behalf yet, so problems will NOT create ServiceNow incidents."
-    warn "  One-time fix: open ${DT_APPS_URL}/ui/apps/dynatrace.automations > Settings > Authorization settings,"
-    warn "  enable all Primary permissions (at least app-engine:functions:run and environment-api:credentials:read), save,"
+  # "Authorization Settings": no consent at all. "403: Forbidden": consent given, but
+  # without a permission the task uses (it reads its own execution first).
+  if [[ "${info}" == *"Authorization Settings"* || "${info}" == *"403"* ]]; then
+    if [[ "${info}" == *"403"* ]]; then
+      warn "The ServiceNow workflow is missing a permission (${info}), so problems will NOT create ServiceNow incidents."
+    else
+      warn "Dynatrace has not been allowed to run workflows on your behalf yet, so problems will NOT create ServiceNow incidents."
+    fi
+    warn "  Fix: open ${DT_APPS_URL}/ui/apps/dynatrace.automations > Settings > Authorization settings,"
+    warn "  enable at least ${DT_WORKFLOW_PERMISSIONS}, save,"
     warn "  then re-run this deploy with the same suffix (or scripts/validate.sh)."
   else
     warn "ServiceNow workflow test run ended in ${state:-unknown state}: ${info:-see the Workflows app execution ${exec_id}}"
