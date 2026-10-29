@@ -481,3 +481,18 @@ test('the DynaKube only instruments the lab namespace', () => {
   assert.match(dynakube, /cloudNativeFullStack:\s+namespaceSelector:/);
   assert.match(dynakube, /key:\s*kubernetes\.io\/metadata\.name\s+operator:\s*In\s+values:\s+-\s*sre-demo\s/);
 });
+test('deploy.ps1 runs the credential setup before deploy.sh, and .env tolerates CRLF', () => {
+  const deploy = read('scripts/deploy.ps1');
+  const setupAt = deploy.indexOf("'setup-integrations.ps1'");
+  assert.ok(setupAt > 0, 'deploy.ps1 must call setup-integrations.ps1');
+  assert.ok(setupAt < deploy.indexOf("Invoke-LabScript -ScriptName 'deploy.sh'"), 'setup must run before deploy.sh');
+  assert.match(deploy, /-NonInteractive:\$Yes/, '-Yes must make the setup non-interactive');
+
+  const setup = read('scripts/setup-integrations.ps1');
+  assert.match(setup, /Read-Host[^\n]*-AsSecureString/, 'secrets must be read with hidden input');
+  assert.match(setup, /UTF8Encoding\]::new\(\$false\)/, '.env must be written without a BOM');
+  assert.match(setup, /-join "`n"/, '.env must be written with LF line endings');
+
+  const loader = read('scripts/lib.sh');
+  assert.match(loader, /line="\$\{line%\$'\\r'\}"/, 'load_env_file must strip a trailing CR');
+});

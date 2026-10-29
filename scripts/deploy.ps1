@@ -45,8 +45,11 @@
 .PARAMETER SkipServiceNow
     Do not configure ServiceNow or the Dynatrace problem webhook.
 
+.PARAMETER SkipSetup
+    Skip setup-integrations.ps1 (the prerequisite and credential checks).
+
 .PARAMETER Yes
-    Do not prompt for confirmation.
+    Do not prompt for confirmation. Credentials must already be in .env.
 
 .EXAMPLE
     .\scripts\deploy.ps1 -SubscriptionId 00000000-0000-0000-0000-000000000000 -Location eastus
@@ -68,10 +71,17 @@ param(
     [string] $AgentLocation,
     [switch] $SkipDynatrace,
     [switch] $SkipServiceNow,
+    [switch] $SkipSetup,
     [switch] $Yes
 )
 
 . (Join-Path $PSScriptRoot 'lib.ps1')
+
+if (-not $SkipSetup) {
+    # Checks tools and prompts for any missing or invalid Dynatrace/ServiceNow credentials.
+    & (Join-Path $PSScriptRoot 'setup-integrations.ps1') -SubscriptionId $SubscriptionId `
+        -SkipDynatrace:$SkipDynatrace -SkipServiceNow:$SkipServiceNow -NonInteractive:$Yes
+}
 
 $arguments = [System.Collections.Generic.List[string]]::new()
 Add-LabOption -Arguments $arguments -Flag '--subscription' -Value $SubscriptionId

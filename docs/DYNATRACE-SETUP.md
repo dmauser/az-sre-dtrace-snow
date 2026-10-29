@@ -4,7 +4,9 @@ The lab needs two credentials from your Dynatrace environment. Everything else �
 per-lab tokens, the metric events, the alerting profile and the ServiceNow webhook — is
 created by Terraform (`infra/terraform/integration/dynatrace.tf`) and destroyed with the lab.
 
-Put the values in `.env` (git-ignored). Never paste them into chat, issues or commits.
+Put the values in `.env` (git-ignored). Never paste them into chat, issues or commits. On
+Windows, `.\scripts\setup-integrations.ps1` prompts for them with hidden input, checks the
+API token scopes and the platform token against the MCP gateway, and writes `.env` for you.
 
 ## 1. Environment URL — `DT_ENV_URL`
 

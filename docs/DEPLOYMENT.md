@@ -121,6 +121,14 @@ installer token, and installs the Dynatrace Operator and DynaKube after AKS is u
 Anything not passed can come from `.env` — copy `.env.example` and edit. Command-line arguments
 take precedence over `.env`.
 
+On Windows, `scripts\setup-integrations.ps1` fills `.env` for you: it checks the tools (from the
+same bash `deploy.sh` uses, offering `winget` installs) and the Azure sign-in, then prompts with
+hidden input for any Dynatrace or ServiceNow value that is missing or rejected. Each value is
+validated live — API token scopes via `apiTokens/lookup`, the platform token via an MCP
+`initialize` call, the ServiceNow login and admin role, and whether the instance is
+hibernating. `deploy.ps1` runs it automatically (non-interactively with `-Yes`; skip it with
+`-SkipSetup`). `.env` is written with LF line endings; the bash loader also tolerates CRLF.
+
 ---
 
 ## Choosing a region

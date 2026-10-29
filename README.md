@@ -252,11 +252,18 @@ cp .env.example .env    # fill in DT_ENV_URL, DT_API_TOKEN, DT_PLATFORM_TOKEN,
 `deploy.sh` checks the Dynatrace token scopes and the ServiceNow credentials in the first
 minute, before anything is created in Azure.
 
-PowerShell:
+PowerShell (Windows) — `deploy.ps1` first runs `scripts\setup-integrations.ps1`, which checks
+the tools (offering `winget` installs for anything missing) and the Azure sign-in, then
+prompts with hidden input for any Dynatrace or ServiceNow credential that is missing or
+rejected, validates it live, and saves it to `.env`:
 
 ```powershell
-.\scripts\deploy.ps1 -SubscriptionId <subscription-id> -Location <azure-region>
+.\scripts\setup-integrations.ps1        # optional: run the checks and prompts on their own
+.\scripts\deploy.ps1 -SubscriptionId <subscription-id> -Location <azure-region> -WithAgent
 ```
+
+With `-Yes`, `deploy.ps1` never prompts: the credentials must already be in `.env`. `-SkipSetup`
+skips the checks entirely.
 
 The deployment is idempotent — if it is interrupted, run it again.
 

@@ -92,6 +92,8 @@ load_env_file() {
   info "Loading configuration from .env"
   # Only export simple KEY=VALUE lines; ignore comments and blanks.
   while IFS= read -r line || [[ -n "${line}" ]]; do
+    # .env files edited on Windows are often CRLF; a stray \r breaks every token.
+    line="${line%$'\r'}"
     [[ "${line}" =~ ^[[:space:]]*# ]] && continue
     [[ "${line}" =~ ^[[:space:]]*$ ]] && continue
     [[ "${line}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue

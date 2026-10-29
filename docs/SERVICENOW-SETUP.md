@@ -11,7 +11,8 @@ after inactivity, so wake yours from the developer portal before deploying. `dep
 preflight fails fast with a clear message if the instance is asleep or the credentials are
 wrong.
 
-Put these in `.env`:
+Put these in `.env` (on Windows, `.\scripts\setup-integrations.ps1` prompts for them, checks the
+login, the admin role and hibernation, and writes the file):
 
 ```bash
 SNOW_INSTANCE_URL=https://<instance>.service-now.com
