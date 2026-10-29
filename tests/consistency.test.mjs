@@ -11,7 +11,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -438,11 +440,59 @@ test('the ServiceNow webhook payload stays valid JSON after Dynatrace substituti
   assert.doesNotThrow(() => JSON.parse(rendered), 'payload must be JSON once placeholders are filled');
 });
 
+test('each Davis anomaly detector queries the same metric and aggregation as its classic metric event', () => {
+  // Latest-platform environments alert on `dql`, classic ones on `selector`;
+  // a scenario must fire identically on both.
+  const tf = read('infra/terraform/integration/dynatrace.tf');
+  const entries = [...tf.matchAll(/^\s+"(\d\d-[a-z0-9-]+)" = \{([\s\S]*?)^\s+\}/gm)];
+  assert.equal(entries.length, 8, `expected 8 alert definitions, found ${entries.length}`);
+  for (const [, key, body] of entries) {
+    const selector = body.match(/selector\s+=\s+"([^"]+)"/)[1];
+    const dql = body.match(/dql\s+=\s+"([^"]+)"/)?.[1];
+    assert.ok(dql, `${key} has no dql, so it never alerts on the latest Dynatrace platform`);
+    const [, dqlAgg, dqlMetric] = dql.match(/value = (min|max|avg)\(([\w.]+)\)/);
+    const selAgg = selector.match(/:(min|max|avg)$/)[1];
+    const grailNames = { 'dt.host.mem.usage': 'dt.host.memory.usage' };
+    const classicMetric = selector.replace(/^builtin:host\./, 'dt.host.').split(':')[0];
+    const selMetric = grailNames[classicMetric] ?? classicMetric;
+    assert.equal(dqlMetric, selMetric, `${key}: dql queries ${dqlMetric} but the metric event selects ${selMetric}`);
+    assert.equal(dqlAgg, selAgg, `${key}: dql aggregates with ${dqlAgg} but the metric event with ${selAgg}`);
+  }
+  const platform = read('infra/terraform/integration/dynatrace-platform.tf');
+  assert.match(platform, /for_each = var\.dynatrace_platform \? local\.metric_events : \{\}/);
+  assert.match(tf, /for_each = var\.dynatrace_platform \? \{\} : local\.metric_events/);
+  assert.match(platform, /value = "\$\{local\.title_prefix\} \$\{each\.value\.title\}"/, 'detector problems must carry the lab prefix');
+});
+
+test('the platform workflow only routes lab problems and raises the same incident as the webhook', () => {
+  const platform = read('infra/terraform/integration/dynatrace-platform.tf');
+  assert.match(platform, /custom_filter = "matchesValue\(event\.name, \\"\$\{local\.title_prefix\}\*\\"\)"/);
+  const js = read('infra/terraform/integration/workflow/servicenow-incident.js');
+  assert.match(js, /const correlationId = 'dynatrace-' \+ displayId;/, 'reset-lab.sh resolves incidents by this prefix');
+  const impact = Number(js.match(/impact: '(\d)'/)[1]);
+  const urgency = Number(js.match(/urgency: '(\d)'/)[1]);
+  assert.ok(impact + urgency <= 3, `impact ${impact} + urgency ${urgency} is below priority 2; the quickstart plan ignores it`);
+  assert.match(js, /startsWith\(CONFIG\.titlePrefix/, 'the deploy smoke test relies on non-lab titles being skipped');
+  assert.match(js, /credentialVaultClient\.getCredentialsDetails/, 'credentials must come from the vault, not the script');
+  assert.ok(!/password\s*[:=]\s*['"]/.test(js), 'no literal password in the workflow script');
+});
+
+test('the workflow script is valid JavaScript once Terraform fills in CONFIG', () => {
+  const js = read('infra/terraform/integration/workflow/servicenow-incident.js');
+  assert.equal(js.split('__CONFIG__').length, 2, 'exactly one __CONFIG__ placeholder (Terraform replaces every occurrence)');
+  const dir = mkdtempSync(join(tmpdir(), 'wf-'));
+  const file = join(dir, 'task.mjs');
+  writeFileSync(file, js.replace('__CONFIG__', JSON.stringify({ titlePrefix: '[sre-demo-x]', credentialId: 'c' })));
+  const r = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
+  rmSync(dir, { recursive: true, force: true });
+  assert.equal(r.status, 0, `node --check failed:\n${r.stderr}`);
+});
+
 test('every Terraform output the deploy reads is declared', () => {
   const outputs = read('infra/terraform/integration/outputs.tf');
   const scripts = read('scripts/lib-integrations.sh') + read('scripts/configure-sre-agent-integrations.sh');
   const declared = new Set([...outputs.matchAll(/^output "([a-z0-9_]+)"/gm)].map((m) => m[1]));
-  const used = new Set([...scripts.matchAll(/output -raw ([a-z0-9_]+)/g)].map((m) => m[1]));
+  const used = new Set([...scripts.matchAll(/output -(?:raw|json) ([a-z0-9_]+)/g)].map((m) => m[1]));
   assert.ok(used.size >= 9, `expected the scripts to read the Terraform outputs, found ${used.size}`);
   for (const name of used) {
     assert.ok(declared.has(name), `scripts read terraform output "${name}" but outputs.tf does not declare it`);

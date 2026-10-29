@@ -1,5 +1,5 @@
 # ServiceNow objects, provisioned through the Table API with the admin account
-# from the environment. Everything after this (the Dynatrace webhook and the
+# from the environment. Everything after this (Dynatrace problem routing and the
 # SRE Agent incident connector) authenticates as the integration user only.
 
 resource "random_password" "integration" {

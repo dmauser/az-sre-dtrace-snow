@@ -8,8 +8,27 @@ variable "lab_suffix" {
   }
 }
 
+variable "dynatrace_platform" {
+  description = <<-EOT
+    true  = latest Dynatrace platform: Davis anomaly detectors (DQL) raise the
+            problems and an AutomationEngine workflow opens the ServiceNow incident.
+            Needs DYNATRACE_PLATFORM_TOKEN.
+    false = classic environment: metric events, an alerting profile and a
+            problem-notification webhook.
+    scripts/lib-integrations.sh detects which one the environment supports.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "dynatrace_apps_url" {
+  description = "Platform UI URL (https://<env-id>.apps.dynatrace.com). Used for problem links in ServiceNow incidents."
+  type        = string
+  default     = ""
+}
+
 variable "servicenow_enabled" {
-  description = "Create the ServiceNow objects and the Dynatrace -> ServiceNow problem webhook."
+  description = "Create the ServiceNow objects and the Dynatrace -> ServiceNow problem routing (webhook or workflow)."
   type        = bool
   default     = true
 }

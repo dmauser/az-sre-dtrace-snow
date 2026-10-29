@@ -181,9 +181,9 @@ the native host, process and Kubernetes signals: a VM extension on both VMs, and
 Dynatrace Operator with a `cloudNativeFullStack` DynaKube limited to the `sre-demo`
 namespace on AKS.
 
-Eight Terraform-managed **metric events** (title prefix `[sre-demo-<suffix>]`) mirror the
-Azure Monitor alert rules. An alerting profile matching that prefix routes the resulting
-Davis problems to a webhook, which opens a priority-2 ServiceNow incident. Azure SRE Agent
+Eight Terraform-managed **metric events** (or, on latest Dynatrace, **Davis anomaly detectors**) (title prefix `[sre-demo-<suffix>]`) mirror the
+Azure Monitor alert rules. An alerting profile and webhook (classic) or an AutomationEngine
+workflow (latest Dynatrace) matching that prefix routes the resulting Davis problems to ServiceNow, which opens a priority-2 ServiceNow incident. Azure SRE Agent
 polls ServiceNow for those incidents and investigates them, querying Dynatrace through its
 MCP connector and Azure through its managed identity.
 

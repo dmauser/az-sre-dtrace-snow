@@ -347,8 +347,15 @@ or installed by hand, re-run `deploy.sh`; the install is idempotent.
 
 ### Dynatrace problem, but no ServiceNow incident
 
-In Dynatrace, open **Settings → Integration → Problem notifications →
-`sre-demo-<suffix>-servicenow` → Send test notification**. A 401 means the integration
+**Latest Dynatrace (workflow).** Open **Workflows → `sre-demo-<suffix>-servicenow` →
+Executions**. "Please ensure Authorization Settings are configured" means the one-time consent
+is missing: **Workflows → Settings → Authorization settings**, enable the Primary permissions,
+save (see [DYNATRACE-SETUP.md](DYNATRACE-SETUP.md#latest-dynatrace-allow-workflows-to-run-as-you-one-time)).
+`scripts/validate.sh` runs the same check. A blocked fetch means the ServiceNow host is missing
+from **Settings → General → External requests**; re-run `deploy.sh` to add it.
+
+**Classic (webhook).** In Dynatrace, open **Settings → Integration → Problem notifications →
+`sre-demo-<suffix>-servicenow` → Send test notification**. For either path, a 401 means the integration
 user's password in ServiceNow no longer matches the generated one (for example, it was reset
 by hand). Terraform cannot detect that, because ServiceNow never returns passwords, so set it
 back to the Key Vault secret `servicenow-integration-password`. A 403 means the user has lost

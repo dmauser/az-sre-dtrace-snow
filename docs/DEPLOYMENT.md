@@ -98,9 +98,9 @@ reused when `--suffix` is supplied.
 --with-agent           Also create an Azure SRE Agent (off by default; chargeable)
 --agent-mode <mode>    ReadOnly | Review (default) | Autonomous
 --agent-location <r>   Agent region when the lab region does not offer SRE Agent
---skip-dynatrace       Azure Monitor only: no OneAgent, metric events or Terraform
+--skip-dynatrace       Azure Monitor only: no OneAgent, alert definitions or Terraform
                        (implies --skip-servicenow, since Dynatrace raises the incidents)
---skip-servicenow      Keep Dynatrace but create no ServiceNow group, user or webhook
+--skip-servicenow      Keep Dynatrace but create no ServiceNow group, user, webhook or workflow
 --yes                  No confirmation prompt
 ```
 

@@ -9,8 +9,8 @@ fault with genuine telemetry — a real full disk, real unschedulable pods, a re
 certificate — and each resettable with one click.
 
 ```text
-fault injected ─► Dynatrace OneAgent + sre_demo.* metrics ─► Dynatrace metric event / problem
-               ─► problem webhook ─► ServiceNow incident (group "SRE Demo Lab", priority 2)
+fault injected ─► Dynatrace OneAgent + sre_demo.* metrics ─► Dynatrace metric event or anomaly detector / problem
+               ─► problem webhook or workflow ─► ServiceNow incident (group "SRE Demo Lab", priority 2)
                ─► Azure SRE Agent picks it up from ServiceNow ─► investigates via Dynatrace MCP + Azure
 ```
 
@@ -165,10 +165,10 @@ flowchart LR
     end
 
     subgraph dt ["Dynatrace"]
-        me["8 metric events<br/>title prefix [sre-demo-&lt;suffix&gt;]"]
+        me["8 metric events / anomaly detectors<br/>title prefix [sre-demo-&lt;suffix&gt;]"]
         prob["Davis problem"]
-        ap["Alerting profile<br/>(lab prefix only)"]
-        wh["Problem webhook"]
+        ap["Alerting profile or workflow trigger<br/>(lab prefix only)"]
+        wh["Problem webhook (classic)<br/>or workflow (latest)"]
         mcp["Remote MCP server"]
     end
 
@@ -189,8 +189,8 @@ flowchart LR
 | Piece | Created by | Where |
 |---|---|---|
 | Dynatrace API tokens (ingest, PaaS, operator) | Terraform | `infra/terraform/integration/dynatrace.tf` |
-| 8 metric events (one or more per scenario) | Terraform | same |
-| Alerting profile + problem webhook → ServiceNow | Terraform | same |
+| 8 metric events, or Davis anomaly detectors on latest Dynatrace (one or more per scenario) | Terraform | same |
+| Alerting profile + problem webhook (classic) or AutomationEngine workflow (latest) → ServiceNow | Terraform | same |
 | ServiceNow assignment group, integration user (`itil`) | Terraform (`restapi` provider) | `infra/terraform/integration/servicenow.tf` |
 | OneAgent on both VMs | Bicep VM extension | `infra/bicep/modules/dynatrace-oneagent.bicep` |
 | Dynatrace Operator + DynaKube on AKS | `deploy.sh` | `k8s/dynatrace/dynakube.yaml`, `scripts/lib-integrations.sh` |
@@ -603,8 +603,8 @@ Starts PostgreSQL, then AKS, then the App VM, then waits for both applications.
 
 Deletes only the lab's resource group, and only if it carries the
 `project=azure-sre-agent-demo` tag. Requires you to type the group name unless `--yes` is given.
-It then runs `terraform destroy` for the lab's Dynatrace tokens, metric events, alerting
-profile and webhook, and its ServiceNow group and integration user (past incidents are kept).
+It then runs `terraform destroy` for the lab's Dynatrace tokens, metric events / anomaly detectors, alerting
+profile and webhook (or workflow and vault credential), and its ServiceNow group and integration user (past incidents are kept).
 
 ---
 
@@ -708,7 +708,7 @@ apps/          scenario-controller and magic8ball (frontend + backend each)
 services/      scenario-runner, resource-burner
 infra/bicep/   main.bicep and modules (incl. dynatrace-oneagent.bicep)
 infra/terraform/integration/
-               Dynatrace tokens, metric events, alerting profile, webhook;
+               Dynatrace tokens, alert definitions, problem routing;
                ServiceNow group and integration user
 k8s/           namespace, workloads, RBAC; k8s/dynatrace/ DynaKube
 scripts/       deploy, validate, reset, stop, start, destroy (.sh and .ps1);

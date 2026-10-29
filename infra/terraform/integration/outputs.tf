@@ -34,12 +34,22 @@ output "problem_title_prefix" {
   value = local.title_prefix
 }
 
-output "alerting_profile_id" {
-  value = dynatrace_alerting.lab.id
+output "dynatrace_mode" {
+  description = "platform = Davis anomaly detectors + workflow; classic = metric events + alerting profile + webhook."
+  value       = var.dynatrace_platform ? "platform" : "classic"
 }
 
-output "metric_event_ids" {
-  value = { for k, v in dynatrace_metric_events.lab : k => v.id }
+output "alerting_profile_id" {
+  value = one(dynatrace_alerting.lab[*].id)
+}
+
+# Scenario key -> the Dynatrace object that raises its problem.
+output "alert_rule_ids" {
+  value = var.dynatrace_platform ? { for k, v in dynatrace_davis_anomaly_detectors.lab : k => v.id } : { for k, v in dynatrace_metric_events.lab : k => v.id }
+}
+
+output "servicenow_workflow_id" {
+  value = one(dynatrace_automation_workflow.servicenow[*].id)
 }
 
 output "servicenow_assignment_group_sys_id" {

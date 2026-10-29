@@ -1,8 +1,21 @@
 # Dynatrace setup
 
 The lab needs two credentials from your Dynatrace environment. Everything else — the
-per-lab tokens, the metric events, the alerting profile and the ServiceNow webhook — is
-created by Terraform (`infra/terraform/integration/dynatrace.tf`) and destroyed with the lab.
+per-lab tokens, the alert definitions and the Dynatrace → ServiceNow routing — is created by
+Terraform (`infra/terraform/integration/`) and destroyed with the lab.
+
+## Classic vs latest Dynatrace
+
+The deploy detects which alerting model your environment has and builds the matching one.
+Both raise the same problems and the same ServiceNow incidents.
+
+| | Classic environment | Latest Dynatrace (no classic metric events) |
+|---|---|---|
+| Detected by | `builtin:anomaly-detection.metric-events` schema exists | that schema returns 404 |
+| Alert definitions | 8 metric events (`dynatrace.tf`) | 8 Davis anomaly detectors on DQL (`dynatrace-platform.tf`) |
+| Problem → ServiceNow | alerting profile + problem-notification webhook | AutomationEngine workflow `sre-demo-<suffix>-servicenow` running `workflow/servicenow-incident.js` |
+| ServiceNow password stored in | the webhook definition | the Dynatrace credential vault (read by the workflow at run time) |
+| `DT_PLATFORM_TOKEN` | optional (SRE Agent only) | **required** |
 
 Put the values in `.env` (git-ignored). Never paste them into chat, issues or commits. On
 Windows, `.\scripts\setup-integrations.ps1` prompts for them with hidden input, checks the
@@ -24,7 +37,8 @@ Either form works; `deploy.sh` derives the other:
 | Scope | Why | Required |
 |---|---|---|
 | `apiTokens.read`, `apiTokens.write` | create the lab's four scoped tokens | yes (checked by preflight) |
-| `settings.read`, `settings.write` | metric events, alerting profile, webhook | yes (checked by preflight) |
+| `settings.read`, `settings.write` | metric events, alerting profile, webhook; mode detection; outbound allowlist | yes (checked by preflight) |
+| `credentialVault.read`, `credentialVault.write` | latest Dynatrace + ServiceNow: the workflow's ServiceNow credential | yes in that mode — **added to the token automatically** by setup/preflight (it holds `apiTokens.write`) |
 | `metrics.read`, `entities.read` | `validate.sh` checks (skipped with 403 otherwise) | recommended |
 | `metrics.ingest`, `logs.ingest`, `openTelemetryTrace.ingest`, `InstallerDownload`, `DataExport`, `activeGateTokenManagement.create` | some tenants only let a token create tokens whose scopes it holds itself | recommended |
 
@@ -39,8 +53,9 @@ Tokens Terraform creates from it, each named `sre-demo-<suffix>-*`:
 
 ## 3. Platform token — `DT_PLATFORM_TOKEN` (`dt0s16.*`)
 
-Optional; needed only with `--with-agent`. It authenticates Azure SRE Agent's
-`dynatrace-mcp` connector to the Dynatrace **remote MCP server**:
+Required on latest Dynatrace (it creates the anomaly detectors and the workflow); otherwise
+needed only with `--with-agent`. It authenticates Azure SRE Agent's `dynatrace-mcp`
+connector to the Dynatrace **remote MCP server**:
 
 ```text
 https://<env-id>.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp
@@ -56,6 +71,25 @@ Install **Dynatrace MCP Server** from Dynatrace Hub if it is not already present
 | `davis:analyzers:read`, `davis:analyzers:execute` | anomaly / forecast tools |
 | `document:documents:read` | `find-documents`, troubleshooting guides |
 | `davis-copilot:nl2dql:execute`, `davis-copilot:dql2nl:execute`, `davis-copilot:conversations:execute` | `create-dql`, `explain-dql`, `ask-dynatrace-docs` |
+| `settings:objects:read`, `settings:objects:write` | latest Dynatrace: Davis anomaly detectors |
+| `automation:workflows:read`, `automation:workflows:write`, `automation:workflows:run` | latest Dynatrace: ServiceNow workflow and its deploy-time test run (checked by preflight) |
+| `app-engine:apps:run`, `app-engine:functions:run` | latest Dynatrace: run the workflow's JavaScript task |
+
+### Latest Dynatrace: allow workflows to run as you (one time)
+
+The workflow runs as the user who owns `DT_PLATFORM_TOKEN`. Dynatrace will not run any
+workflow task until that user consents once per environment — this cannot be done by API:
+
+1. Open **Workflows** (`https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.automations`).
+2. **Settings** (top right) → **Authorization settings**.
+3. Enable the **Primary permissions** (at minimum `app-engine:functions:run` and
+   `environment-api:credentials:read`) and save.
+
+The deploy and `validate.sh` run the workflow once with a non-lab title (it exits before
+calling ServiceNow) and print these steps if the consent is missing.
+
+The deploy also adds your ServiceNow host to **Settings → General → External requests**
+(the JavaScript outbound allowlist) when that list is enforced. It never removes entries.
 
 `configure-sre-agent-integrations.sh` sends an MCP `initialize` to the gateway before it
 creates the connector, so a wrong token fails there with a clear message.
@@ -64,12 +98,15 @@ creates the connector, so a wrong token fails there with a clear message.
 
 | Object | Name |
 |---|---|
-| Metric events (8) | title prefix `[sre-demo-<suffix>]`, covering scenarios 01–06 |
-| Alerting profile | `sre-demo-<suffix>` — matches only events with the lab's title prefix |
-| Problem notification (webhook) | `sre-demo-<suffix>-servicenow` — POSTs to `/api/now/table/incident` as the integration user, impact 2 / urgency 1 (priority **2 – High**), `correlation_id` `dynatrace-<problem id>` |
+| Metric events (8) — classic | title prefix `[sre-demo-<suffix>]`, covering scenarios 01–06 |
+| Alerting profile — classic | `sre-demo-<suffix>` — matches only events with the lab's title prefix |
+| Problem notification (webhook) — classic | `sre-demo-<suffix>-servicenow` — POSTs to `/api/now/table/incident` as the integration user, impact 2 / urgency 1 (priority **2 – High**), `correlation_id` `dynatrace-<problem id>` |
+| Davis anomaly detectors (8) — latest | same titles, thresholds and aggregations as the metric events, as DQL |
+| Credential `sre-demo-<suffix>-servicenow` — latest | integration user + password, owner-only, App Engine scope |
+| Workflow `sre-demo-<suffix>-servicenow` — latest | Davis problem trigger on `event.name` matching the prefix; creates the same incident as the webhook (idempotent on `correlation_id`) |
 | OneAgent | both VMs (host group `sre-demo-vm-<suffix>`), AKS cloud-native full stack on namespace `sre-demo` (host group `sre-demo-aks-<suffix>`) |
 
-Because the alerting profile filters on the title prefix, several labs (or other workloads)
+Because the alerting profile / workflow trigger filters on the title prefix, several labs (or other workloads)
 can share one Dynatrace environment without paging each other's ServiceNow queue.
 
 ## Troubleshooting
@@ -81,3 +118,7 @@ can share one Dynatrace environment without paging each other's ServiceNow queue
 | No `sre_demo.*` metrics | `validate.sh` → Dynatrace section; check `DT_API_URL` / `DT_INGEST_TOKEN` in the app environment |
 | No hosts in host group | OneAgent extension status: `az vm extension list ... --subscription <id>` |
 | MCP `initialize` 401/403 | platform token missing `mcp-gateway:*` scopes or expired |
+| `No schema with topic identifier 'builtin:anomaly-detection.metric-events'` | latest Dynatrace with an older checkout of this repo; pull and re-run — the mode is now detected |
+| Deploy/validate: "has not been allowed to run workflows on your behalf" | do the one-time [authorization settings](#latest-dynatrace-allow-workflows-to-run-as-you-one-time) step |
+| Workflow execution: `credentialVault` 403 / credential not found | the workflow actor must be the API token's owner (credential is owner-only); create both tokens as the same user |
+| Workflow execution: fetch blocked / host not allowed | add the ServiceNow host under **Settings → General → External requests** |

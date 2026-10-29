@@ -37,7 +37,8 @@ agent ever sees it.
 The integration user's password is stored in the lab Key Vault as
 `servicenow-integration-password` and is used in two places:
 
-- **Dynatrace problem webhook.** It sends `POST /api/now/table/incident` with impact 2 /
+- **Dynatrace problem routing** — the problem webhook (classic) or the workflow, which reads
+  it from the Dynatrace credential vault (latest Dynatrace). Either sends `POST /api/now/table/incident` with impact 2 /
   urgency 1, which gives **priority 2 – High**, and sets `correlation_id = dynatrace-<problem id>`.
 - **Azure SRE Agent** incident platform (basic auth, below).
 
@@ -57,7 +58,7 @@ which is git-ignored.
 4. **Authentication**: *Basic*. Username `sre_demo_integration`; password from the file above.
 5. **Assignment group**: `SRE Demo Lab`.
 6. Tick **Quickstart response plan**. It indexes **High (P2)** incidents, which is why the
-   webhook sets urgency 1.
+   Dynatrace routing sets urgency 1.
 7. Save. The agent polls ServiceNow every minute.
 
 > **Only one incident platform can be active.** If the agent was connected to Azure Monitor
@@ -81,6 +82,6 @@ Then inject scenario 03 or 05 from the console. Within roughly 5 minutes you sho
 | Symptom | Cause |
 |---|---|
 | Preflight: `HTTP 401` from ServiceNow | wrong admin password, or the PDI is hibernating (it may also redirect to a login page) |
-| Problem raised, no incident | Dynatrace → **Settings → Integration → Problem notifications** → `sre-demo-<suffix>-servicenow` → **Send test notification** |
+| Problem raised, no incident | Classic: **Settings → Integration → Problem notifications** → `sre-demo-<suffix>-servicenow` → **Send test notification**. Latest: **Workflows** → `sre-demo-<suffix>-servicenow` → executions |
 | Incident created, agent ignores it | priority not 2, wrong assignment group, or the quickstart plan is not enabled |
 | Incident priority is 3 | the instance's priority lookup was customised; change `urgency` in `dynatrace.tf` |

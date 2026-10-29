@@ -43,7 +43,7 @@
     Do not configure Dynatrace. Implies -SkipServiceNow.
 
 .PARAMETER SkipServiceNow
-    Do not configure ServiceNow or the Dynatrace problem webhook.
+    Do not configure ServiceNow or the Dynatrace problem routing.
 
 .PARAMETER SkipSetup
     Skip setup-integrations.ps1 (the prerequisite and credential checks).

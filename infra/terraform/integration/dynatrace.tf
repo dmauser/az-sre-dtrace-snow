@@ -1,7 +1,7 @@
 locals {
-  # Every Dynatrace object carries this prefix. The alerting profile matches on
-  # it, so only this lab's problems are forwarded to ServiceNow even when the
-  # Dynatrace environment is shared.
+  # Every Dynatrace object carries this prefix. Problem routing (the classic
+  # alerting profile or the platform workflow trigger) matches on it, so only
+  # this lab's problems reach ServiceNow even when the environment is shared.
   title_prefix   = "[sre-demo-${var.lab_suffix}]"
   aks_host_group = "sre-demo-aks-${var.lab_suffix}"
   vm_host_group  = "sre-demo-vm-${var.lab_suffix}"
@@ -9,6 +9,16 @@ locals {
   lab_filter = "filter(eq(\"lab.suffix\",\"${var.lab_suffix}\"))"
 
   aks_hosts = "filter(in(\"dt.entity.host\",entitySelector(\"type(HOST),fromRelationships.isInstanceOf(type(HOST_GROUP),entityName.equals(~\"${local.aks_host_group}~\"))\")))"
+
+  # DQL equivalents for the latest platform (Davis anomaly detectors).
+  dql_lab      = "filter: lab.suffix == \"${var.lab_suffix}\""
+  dql_aks_host = "by: {dt.entity.host}, filter: in(dt.entity.host, classicEntitySelector(\"type(HOST),fromRelationships.isInstanceOf(type(HOST_GROUP),entityName.equals(\\\"${local.aks_host_group}\\\"))\"))"
+
+  # Classic event types -> Davis event.type values for anomaly detectors.
+  davis_event_type = {
+    RESOURCE = "RESOURCE_CONTENTION_EVENT"
+    ERROR    = "ERROR_EVENT"
+  }
 
   # Keep keys in step with toDynatraceKey() in apps/*/backend/src/dynatrace.ts
   # and the metric names in apps/scenario-controller/backend/src/telemetry.ts.
@@ -18,6 +28,7 @@ locals {
       title       = "01 App VM demo disk capacity"
       description = "The dedicated demo data disk on the App VM (/var/sre-demo) is above ${var.disk_threshold_percent}%. Expected root cause: runaway application logging."
       selector    = "sre_demo.disk_percent_used:${local.lab_filter}:max"
+      dql         = "timeseries value = max(sre_demo.disk_percent_used), ${local.dql_lab}"
       condition   = "ABOVE"
       threshold   = var.disk_threshold_percent
       event_type  = "RESOURCE"
@@ -27,6 +38,7 @@ locals {
       title       = "02 AKS node CPU pressure"
       description = "AKS node CPU utilisation is above ${var.node_pressure_threshold_percent}%. Expected remediation: scale the system node pool above the baseline."
       selector    = "builtin:host.cpu.usage:${local.aks_hosts}:splitBy():max"
+      dql         = "timeseries value = max(dt.host.cpu.usage), ${local.dql_aks_host}"
       condition   = "ABOVE"
       threshold   = var.node_pressure_threshold_percent
       event_type  = "RESOURCE"
@@ -36,6 +48,7 @@ locals {
       title       = "02 AKS node memory pressure"
       description = "AKS node memory utilisation is above ${var.node_pressure_threshold_percent}%. Expected remediation: scale the system node pool above the baseline."
       selector    = "builtin:host.mem.usage:${local.aks_hosts}:splitBy():max"
+      dql         = "timeseries value = max(dt.host.memory.usage), ${local.dql_aks_host}"
       condition   = "ABOVE"
       threshold   = var.node_pressure_threshold_percent
       event_type  = "RESOURCE"
@@ -45,6 +58,7 @@ locals {
       title       = "02 AKS pods cannot be scheduled"
       description = "One or more pods in the sre-demo namespace are Pending, indicating insufficient allocatable node capacity."
       selector    = "sre_demo.aks_pending_pods:${local.lab_filter}:max"
+      dql         = "timeseries value = max(sre_demo.aks_pending_pods), ${local.dql_lab}"
       condition   = "ABOVE"
       threshold   = 0.5
       event_type  = "RESOURCE"
@@ -54,6 +68,7 @@ locals {
       title       = "03 Magic 8 Ball HTTP failure rate"
       description = "Magic 8 Ball is returning server errors on more than ${var.failure_rate_threshold_percent}% of requests. Correlate with the deployment.imagetag dimension and /api/version."
       selector    = "sre_demo.magic8ball_request_failed:${local.lab_filter}:splitBy():avg"
+      dql         = "timeseries value = avg(sre_demo.magic8ball_request_failed), ${local.dql_lab}"
       condition   = "ABOVE"
       threshold   = var.failure_rate_threshold_percent / 100
       event_type  = "ERROR"
@@ -63,6 +78,7 @@ locals {
       title       = "04 PostgreSQL connection utilisation"
       description = "PostgreSQL connection usage is above ${var.connection_threshold_percent}% of max_connections. Expected root cause: a client leaking connections."
       selector    = "sre_demo.postgres_connection_percent:${local.lab_filter}:max"
+      dql         = "timeseries value = max(sre_demo.postgres_connection_percent), ${local.dql_lab}"
       condition   = "ABOVE"
       threshold   = var.connection_threshold_percent
       event_type  = "RESOURCE"
@@ -72,6 +88,7 @@ locals {
       title       = "05 PostgreSQL dependency failures"
       description = "Repeated failures reaching PostgreSQL on TCP 5432 while the database service itself is healthy. Check NSG rules on the database subnet."
       selector    = "sre_demo.postgres_connectivity:${local.lab_filter}:min"
+      dql         = "timeseries value = min(sre_demo.postgres_connectivity), ${local.dql_lab}"
       condition   = "BELOW"
       threshold   = 1
       event_type  = "ERROR"
@@ -81,6 +98,7 @@ locals {
       title       = "06 Magic 8 Ball TLS validation failing"
       description = "Synthetic HTTPS checks against Magic 8 Ball fail TLS validation while pods remain healthy. Check server certificate validity dates."
       selector    = "sre_demo.magic8ball_tls_valid:${local.lab_filter}:min"
+      dql         = "timeseries value = min(sre_demo.magic8ball_tls_valid), ${local.dql_lab}"
       condition   = "BELOW"
       threshold   = 1
       event_type  = "ERROR"
@@ -128,13 +146,17 @@ resource "dynatrace_api_token" "operator_data_ingest" {
   scopes  = ["metrics.ingest", "logs.ingest", "openTelemetryTrace.ingest"]
 }
 
+# ===========================================================================
+# Classic environments (var.dynatrace_platform = false)
+# ===========================================================================
+
 # ---------------------------------------------------------------------------
 # Metric events: Dynatrace's equivalent of alerts.bicep. Each raises a Davis
 # problem whose title starts with local.title_prefix.
 # ---------------------------------------------------------------------------
 
 resource "dynatrace_metric_events" "lab" {
-  for_each = local.metric_events
+  for_each = var.dynatrace_platform ? {} : local.metric_events
 
   enabled = true
   summary = "${local.title_prefix} ${each.value.title}"
@@ -176,6 +198,8 @@ resource "dynatrace_metric_events" "lab" {
 # ---------------------------------------------------------------------------
 
 resource "dynatrace_alerting" "lab" {
+  count = var.dynatrace_platform ? 0 : 1
+
   name = "sre-demo-${var.lab_suffix}"
 
   rules {
@@ -252,12 +276,17 @@ locals {
   EOT
 }
 
+moved {
+  from = dynatrace_alerting.lab
+  to   = dynatrace_alerting.lab[0]
+}
+
 resource "dynatrace_webhook_notification" "servicenow" {
-  count = var.servicenow_enabled ? 1 : 0
+  count = var.servicenow_enabled && !var.dynatrace_platform ? 1 : 0
 
   active                 = true
   name                   = "sre-demo-${var.lab_suffix}-servicenow"
-  profile                = dynatrace_alerting.lab.id
+  profile                = dynatrace_alerting.lab[0].id
   url                    = "${trimsuffix(var.servicenow_instance_url, "/")}/api/now/table/incident?sysparm_input_display_value=true"
   insecure               = false
   notify_closed_problems = false

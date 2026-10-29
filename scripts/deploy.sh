@@ -52,11 +52,11 @@ Usage: scripts/deploy.sh [options]
   --tag <Key=Value>      Extra tag to apply to the demo resource group, e.g. for a
                          subscription-level policy exemption. Repeatable, or
                          comma-separated (Key1=Value1,Key2=Value2).
-  --skip-dynatrace       Do not configure Dynatrace (OneAgent, metric events,
-                         problem webhook). Implies --skip-servicenow.
+  --skip-dynatrace       Do not configure Dynatrace (OneAgent, alert definitions,
+                         problem routing). Implies --skip-servicenow.
                          Dynatrace is enabled whenever DT_ENV_URL is set in .env.
   --skip-servicenow      Do not create the ServiceNow group/user or the
-                         Dynatrace -> ServiceNow incident webhook.
+                         Dynatrace -> ServiceNow incident routing.
   --yes                   Do not prompt for confirmation
   -h, --help             Show this help
 

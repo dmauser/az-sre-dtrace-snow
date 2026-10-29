@@ -332,19 +332,45 @@ if ($SkipDynatrace) {
             $scopes = @(($r.Body | ConvertFrom-Json).scopes)
             $missing = @($DtRequired | Where-Object { $scopes -notcontains $_ })
             if ($missing.Count) { return "API token is missing required scope(s): $($missing -join ', ')" }
+            # Latest-platform environments have no classic metric-event schema.
+            $s = Invoke-LabHttp GET "$($u.Classic)/api/v2/settings/schemas/builtin:anomaly-detection.metric-events" @{ Authorization = "Api-Token $v" }
+            if ($s.Code -notin 200, 404) { return "Could not read Dynatrace settings schemas (HTTP $($s.Code))" }
+            $script:DtPlatform = ($s.Code -eq 404)
+            if ($script:DtPlatform -and -not $SkipServiceNow) {
+                $vault = @(@('credentialVault.read', 'credentialVault.write') | Where-Object { $scopes -notcontains $_ })
+                if ($vault.Count) {
+                    # apiTokens.write lets the token gain the scopes itself; fall back to manual steps.
+                    $tokenId = ($r.Body | ConvertFrom-Json).id
+                    $put = @{ scopes = @($scopes + $vault) } | ConvertTo-Json -Compress
+                    $p = Invoke-LabHttp PUT "$($u.Classic)/api/v2/apiTokens/$tokenId" @{ Authorization = "Api-Token $v" } $put
+                    if ($p.Code -notin 200, 204) {
+                        return "This is a latest-platform environment: the ServiceNow workflow reads its credentials from the Dynatrace credential vault, so the API token also needs $($vault -join ', ') (automatic update failed, HTTP $($p.Code)). Add them in Access Tokens, or paste a new token."
+                    }
+                    $scopes = @($scopes + $vault)
+                    $script:DtVaultAdded = $vault
+                }
+            }
             $script:DtScopes = $scopes
             $null
         }
         if ($dtApi) {
             Write-Ok 'API token accepted with the required scopes'
+            if ($script:DtVaultAdded) { Write-Ok "Added $($script:DtVaultAdded -join ', ') to the API token (ServiceNow credentials live in the Dynatrace credential vault)" }
+            if ($script:DtPlatform) { Write-Ok 'Latest Dynatrace platform: alerts use Davis anomaly detectors + a ServiceNow workflow (platform token required)' }
+            else { Write-Ok 'Classic Dynatrace alerting: metric events + alerting profile + webhook' }
             $rec = @($DtRecommended | Where-Object { $script:DtScopes -notcontains $_ })
             if ($rec.Count) { Write-Warn "Recommended scope(s) missing (validate.sh checks / token creation may fail): $($rec -join ', ')" }
         }
 
         $mcp = "$($u.Apps)/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp"
-        $dtPlat = Get-ValidValue -Key 'DT_PLATFORM_TOKEN' -Prompt 'Dynatrace platform token (dt0s16.*; Enter to skip, only needed with -WithAgent)' -Secret -Optional -Validate {
+        $platPrompt = if ($script:DtPlatform) { 'Dynatrace platform token (dt0s16.*; required on the latest platform)' } else { 'Dynatrace platform token (dt0s16.*; Enter to skip, only needed with -WithAgent)' }
+        $dtPlat = Get-ValidValue -Key 'DT_PLATFORM_TOKEN' -Prompt $platPrompt -Secret -Optional:(-not $script:DtPlatform) -Validate {
             param($v)
             if ($v -notmatch '^dt0s16\.') { return 'Platform tokens start with dt0s16.' }
+            if ($script:DtPlatform) {
+                $w = Invoke-LabHttp GET "$($u.Apps)/platform/automation/v1/workflows?limit=1" @{ Authorization = "Bearer $v" }
+                if ($w.Code -ne 200) { return "Platform token cannot read workflows (HTTP $($w.Code)); it needs the automation and davis scopes in docs/DYNATRACE-SETUP.md" }
+            }
             $init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"sre-demo-lab-setup","version":"1.0"}}}'
             $r = Invoke-LabHttp POST $mcp @{ Authorization = "Bearer $v"; Accept = 'application/json, text/event-stream' } $init
             switch ($r.Code) {

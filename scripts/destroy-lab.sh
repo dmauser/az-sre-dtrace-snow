@@ -84,7 +84,7 @@ LAB_SUFFIX=""
 # Only when deleting the lab recorded in state — not an arbitrary --resource-group.
 [[ "${TARGET_RG}" == "$(state_get resourceGroup)" ]] && LAB_SUFFIX="$(state_get suffix)"
 if [[ -n "${LAB_SUFFIX}" && -d "${REPO_ROOT}/infra/terraform/integration/terraform.tfstate.d/${LAB_SUFFIX}" ]]; then
-  printf '  Dynatrace/ServiceNow: tokens, metric events, alerting profile, webhook,\n'
+  printf '  Dynatrace/ServiceNow: tokens, alert definitions, problem routing,\n'
   printf '                        group and integration user for %s (terraform destroy)\n' "${LAB_SUFFIX}"
 fi
 echo

@@ -259,9 +259,31 @@ if [[ "$(state_get dynatraceEnabled false)" == "true" ]]; then
       report "${label}" "$([[ "${code}" == "200" && "${n:-0}" -ge "${min}" ]] && echo true || echo false)" \
         "${n:-0} found (HTTP ${code:-none})${hint:+; ${hint}}"
     }
-    dt_check "Metric events for ${DT_PREFIX}" \
-      "/api/v2/settings/objects?schemaIds=builtin:anomaly-detection.metric-events&fields=value&pageSize=500" \
-      "[.items[] | select((.value.eventTemplate.title // \"\") | startswith(\"${DT_PREFIX}\"))] | length" 8 ""
+    dt_detect_mode
+    if [[ "${DT_PLATFORM_MODE}" == "true" ]]; then
+      dt_check "Davis anomaly detectors for ${DT_PREFIX}" \
+        "/api/v2/settings/objects?schemaIds=builtin:davis.anomaly-detectors&fields=value&pageSize=500" \
+        "[.items[] | select((.value.title // \"\") | startswith(\"${DT_PREFIX}\"))] | length" 8 ""
+      if [[ "$(state_get servicenowEnabled false)" == "true" && -z "${DT_PLATFORM_TOKEN:-}" ]]; then
+        skip "ServiceNow workflow test run (DT_PLATFORM_TOKEN not set in .env)"
+      elif [[ "$(state_get servicenowEnabled false)" == "true" ]]; then
+        # "[sre-demo-<suffix>]" -> workflow "sre-demo-<suffix>-servicenow"
+        WF_TITLE="${DT_PREFIX#[}"; WF_TITLE="${WF_TITLE%]}-servicenow"
+        WF_ID="$(dt_platform_api GET "/platform/automation/v1/workflows?search=${WF_TITLE}" 2>/dev/null | _http_body \
+          | jq -r --arg t "${WF_TITLE}" '[.results[]? | select(.title == $t)][0].id // empty' 2>/dev/null)"
+        if [[ -z "${WF_ID}" ]]; then
+          report "Dynatrace workflow ${WF_TITLE} exists" false "re-run deploy with the same suffix"
+        elif dt_workflow_smoke_test "${WF_ID}"; then
+          report "Dynatrace workflow ${WF_TITLE} runs" true
+        else
+          report "Dynatrace workflow ${WF_TITLE} runs" false "see the warning above"
+        fi
+      fi
+    else
+      dt_check "Metric events for ${DT_PREFIX}" \
+        "/api/v2/settings/objects?schemaIds=builtin:anomaly-detection.metric-events&fields=value&pageSize=500" \
+        "[.items[] | select((.value.eventTemplate.title // \"\") | startswith(\"${DT_PREFIX}\"))] | length" 8 ""
+    fi
     dt_check "Custom sre_demo.* metrics reaching Dynatrace" \
       "/api/v2/metrics?metricSelector=sre_demo.*&writtenSince=now-30m&fields=metricId" \
       ".totalCount // 0" 1 "allow 5 min after deployment"

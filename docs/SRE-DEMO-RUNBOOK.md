@@ -26,7 +26,7 @@ Everything must be **PASS**. Then:
   should be empty for this lab; if they are not, run `./scripts/reset-lab.sh`.
 
 With ServiceNow connected as the agent's incident platform, every scenario follows the same
-path: the fault fires a Dynatrace metric event, which raises a problem, which opens a P2
+path: the fault fires a Dynatrace metric event (or anomaly detector), which raises a problem, which opens a P2
 ServiceNow incident. The agent then picks the incident up within about a minute, with no
 prompt. The per-scenario prompts below are still useful for driving the investigation by
 hand, or when Dynatrace is skipped.
