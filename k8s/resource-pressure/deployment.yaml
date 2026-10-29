@@ -1,0 +1,92 @@
+# -----------------------------------------------------------------------------
+# resource-burner — scenario 02 pressure workload.
+#
+# Deployed at replicas: 0 and left in place. Activating scenario 02 scales it
+# up; reset scales it back to zero. Nothing is created or deleted at fault time,
+# which is what makes both operations idempotent and keeps the runner's RBAC
+# down to "patch deployments".
+#
+# Sizing note: the requests below are what actually creates the incident. On a
+# single 2 vCPU node roughly 1.1 cores remain after system workloads, so at
+# 300m per replica only about three replicas can be scheduled and the rest stay
+# Pending. The CPU limit of 500m keeps the node loaded but still responsive, so
+# Magic 8 Ball degrades rather than disappears — a degradation is far more
+# instructive to investigate than a hard outage.
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resource-burner
+  namespace: sre-demo
+  labels:
+    app: resource-burner
+    project: azure-sre-agent-demo
+    sre-demo-scenario: "true"
+    scenario-id: "02"
+spec:
+  replicas: 0
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: resource-burner
+  template:
+    metadata:
+      labels:
+        app: resource-burner
+        project: azure-sre-agent-demo
+        sre-demo-scenario: "true"
+        scenario-id: "02"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # Never evict application workloads to make room for the pressure test.
+      priorityClassName: sre-demo-low-priority
+      terminationGracePeriodSeconds: 5
+# Sizing note: these numbers are what create the incident, and the gap between
+# them is deliberate. The node has ~1900m allocatable and system workloads plus
+# the demo apps already request ~1617m, leaving roughly 283m. At a 100m request
+# only two replicas fit; the rest stay Pending. Those two then consume up to
+# 900m each, so the node genuinely saturates and Magic 8 Ball degrades.
+#
+# Under-requesting while over-consuming is exactly how noisy-neighbour incidents
+# happen in production, and it produces both signals this scenario needs:
+# unschedulable pods AND real CPU starvation. A workload that merely failed to
+# schedule would leave the cluster idle and Magic 8 Ball perfectly healthy.
+      containers:
+        - name: resource-burner
+          image: __RESOURCE_BURNER_IMAGE__
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MEMORY_MB
+              value: "300"
+            - name: CPU_PERCENT
+              value: "95"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 900m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: sre-demo-low-priority
+value: -10
+globalDefault: false
+preemptionPolicy: Never
+description: >-
+  Scenario 02 pressure workload. Negative priority with preemption disabled so
+  the burner can never evict Magic 8 Ball or scenario-runner; it simply stays
+  Pending when the node is full, which is the signal the scenario is designed to
+  produce.

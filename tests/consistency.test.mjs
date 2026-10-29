@@ -1,0 +1,483 @@
+/**
+ * Cross-file consistency tests.
+ *
+ * These check the seams where this project is most likely to break silently.
+ * A metric renamed in the controller but not in the alert rule, a Kubernetes
+ * placeholder that deploy.sh never substitutes, or a scenario added without
+ * documentation would all leave the lab looking healthy while quietly failing
+ * to do its job. Type checking cannot catch any of them because the mismatch
+ * spans TypeScript, Bicep, YAML and Bash.
+ */
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+// Normalise line endings: Windows checkouts with core.autocrlf=true see CRLF.
+const read = (path) => readFileSync(join(repoRoot, path), 'utf8').replace(/\r\n/g, '\n');
+
+/**
+ * Removes YAML comment lines. These tests must analyse configuration, not the
+ * prose explaining it — otherwise a comment mentioning "cluster-admin" or a
+ * placeholder reads as the real thing.
+ */
+const stripComments = (yaml) =>
+  yaml
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n');
+
+test('every sre_demo_ metric queried by an alert rule is emitted by the controller', () => {
+  const alerts = read('infra/bicep/modules/alerts.bicep');
+  const telemetry = read('apps/scenario-controller/backend/src/telemetry.ts');
+
+  const queried = new Set([...alerts.matchAll(/"(sre_demo_[a-z0-9_]+)"/g)].map((m) => m[1]));
+  const emitted = new Set([...telemetry.matchAll(/'(sre_demo_[a-z0-9_]+)'/g)].map((m) => m[1]));
+
+  assert.ok(queried.size > 0, 'alerts.bicep should query at least one custom metric');
+
+  for (const metric of queried) {
+    assert.ok(
+      emitted.has(metric),
+      `Alert rule queries "${metric}" but the controller never emits it. ` +
+        `Emitted: ${[...emitted].join(', ')}`,
+    );
+  }
+});
+
+test('every registered scenario has an implementation, a document and an id', () => {
+  const registry = read('apps/scenario-controller/backend/src/scenarios/index.ts');
+  const registered = [...registry.matchAll(/new (\w+Scenario)\(\)/g)].map((m) => m[1]);
+
+  assert.equal(registered.length, 6, `expected 6 registered scenarios, found ${registered.length}`);
+
+  const scenarioDir = join(repoRoot, 'apps/scenario-controller/backend/src/scenarios');
+  const sources = readdirSync(scenarioDir).filter((f) => f.endsWith('.ts'));
+  const combined = sources.map((f) => readFileSync(join(scenarioDir, f), 'utf8')).join('\n');
+
+  for (const className of registered) {
+    assert.ok(
+      combined.includes(`class ${className}`),
+      `${className} is registered but no class definition was found`,
+    );
+  }
+
+  const ids = [...combined.matchAll(/readonly id = '(\d{2})'/g)].map((m) => m[1]).sort();
+  assert.deepEqual(ids, ['01', '02', '03', '04', '05', '06'], 'scenario IDs must be 01-06 and unique');
+
+  const docs = readdirSync(join(repoRoot, 'docs/scenarios'));
+  for (const id of ids) {
+    assert.ok(
+      docs.some((doc) => doc.startsWith(id)),
+      `Scenario ${id} has no document in docs/scenarios/`,
+    );
+  }
+});
+
+test('every Kubernetes manifest placeholder is substituted by deploy.sh', () => {
+  // The DynaKube is rendered by dynatrace_install_operator, which deploy.sh sources.
+  const deploy = read('scripts/deploy.sh') + read('scripts/lib-integrations.sh');
+  const manifestDir = join(repoRoot, 'k8s');
+
+  const collect = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return collect(full);
+      return entry.name.endsWith('.yaml') ? [full] : [];
+    });
+
+  const placeholders = new Set();
+  for (const file of collect(manifestDir)) {
+    const content = stripComments(readFileSync(file, 'utf8'));
+    for (const match of content.matchAll(/__([A-Z0-9_]+)__/g)) {
+      placeholders.add(match[1]);
+    }
+  }
+
+  assert.ok(placeholders.size > 0, 'expected the manifests to contain placeholders');
+
+  for (const placeholder of placeholders) {
+    assert.ok(
+      deploy.includes(`__${placeholder}__`),
+      `Manifests use __${placeholder}__ but deploy.sh never substitutes it, ` +
+        'so it would be applied to the cluster literally.',
+    );
+  }
+});
+
+test('scenario-runner endpoints called by the controller exist in the runner', () => {
+  const client = read('apps/scenario-controller/backend/src/runner.ts');
+  const server = read('services/scenario-runner/src/index.ts');
+
+  const called = [...client.matchAll(/call<[^>]*>\('(GET|POST)', '([^']+)'/g)].map((m) => ({
+    method: m[1],
+    path: m[2],
+  }));
+
+  assert.ok(called.length > 0, 'expected the controller to call the runner');
+
+  for (const { method, path } of called) {
+    const handler = `app.${method.toLowerCase()}('${path}'`;
+    assert.ok(
+      server.includes(handler),
+      `Controller calls ${method} ${path} but scenario-runner has no handler for it`,
+    );
+  }
+});
+
+test('lifecycle scripts referenced in the README exist and are executable shell', () => {
+  const readme = read('README.md');
+  const referenced = new Set(
+    [...readme.matchAll(/scripts\/([a-z-]+\.(?:sh|ps1))/g)].map((m) => m[1]),
+  );
+
+  assert.ok(referenced.size > 0, 'README should reference the lifecycle scripts');
+
+  for (const script of referenced) {
+    assert.ok(existsSync(join(repoRoot, 'scripts', script)), `README references missing scripts/${script}`);
+  }
+
+  // Every Bash script must have a PowerShell counterpart, and vice versa.
+  for (const name of ['deploy', 'validate', 'reset-lab', 'stop-lab', 'start-lab', 'destroy-lab']) {
+    assert.ok(existsSync(join(repoRoot, 'scripts', `${name}.sh`)), `missing scripts/${name}.sh`);
+    assert.ok(existsSync(join(repoRoot, 'scripts', `${name}.ps1`)), `missing scripts/${name}.ps1`);
+  }
+});
+
+test('the disk scenario can never be configured to fill the disk completely', () => {
+  const config = read('apps/scenario-controller/backend/src/config.ts');
+
+  const maxPercent = Number(/maxPercent:\s*(\d+)/.exec(config)?.[1]);
+  assert.ok(Number.isFinite(maxPercent), 'config must define disk.maxPercent');
+  assert.ok(maxPercent < 100, `disk.maxPercent is ${maxPercent}; it must stay below 100`);
+  assert.ok(maxPercent <= 95, `disk.maxPercent of ${maxPercent} leaves too little headroom`);
+
+  const disk = read('apps/scenario-controller/backend/src/scenarios/disk.ts');
+  assert.ok(
+    disk.includes('Math.min(config.disk.targetPercent, config.disk.maxPercent)'),
+    'the disk scenario must clamp its target to the hard ceiling',
+  );
+  assert.ok(disk.includes('guardBytes'), 'the disk scenario must enforce an absolute free-space floor');
+});
+
+test('database session termination is always filtered to this lab', () => {
+  const db = read('apps/scenario-controller/backend/src/db.ts');
+
+  const terminates = db.includes('pg_terminate_backend');
+  assert.ok(terminates, 'expected a termination path to exist');
+
+  // An unfiltered pg_terminate_backend would turn a partial incident into a
+  // total outage, and could kill sessions this lab does not own.
+  const filtered = /pg_terminate_backend\(pid\)[\s\S]{0,200}application_name LIKE 'sre-demo-scenario%'/.test(db);
+  assert.ok(filtered, 'pg_terminate_backend must be filtered on application_name');
+  assert.ok(db.includes('pid <> pg_backend_pid()'), 'termination must exclude the calling session');
+});
+
+test('the resource-burner cannot preempt application workloads', () => {
+  const manifest = stripComments(read('k8s/resource-pressure/deployment.yaml'));
+
+  assert.ok(manifest.includes('priorityClassName: sre-demo-low-priority'), 'burner must use the low priority class');
+  assert.ok(manifest.includes('preemptionPolicy: Never'), 'burner must never preempt other pods');
+  assert.match(manifest, /value:\s*-\d+/, 'burner priority value must be negative');
+  assert.ok(manifest.includes('replicas: 0'), 'burner must be dormant at baseline');
+});
+
+test('scenario-runner RBAC is namespace-scoped and secret access is enumerated', () => {
+  const rbac = stripComments(read('k8s/rbac/scenario-runner.yaml'));
+
+  assert.ok(!rbac.includes('cluster-admin'), 'scenario-runner must never bind cluster-admin');
+  assert.ok(rbac.includes('resourceNames:'), 'secret access must be restricted to named secrets');
+
+  for (const verb of ['create', 'delete', 'deletecollection']) {
+    assert.ok(
+      !new RegExp(`verbs:.*["']${verb}["']`).test(rbac),
+      `scenario-runner must not be granted the "${verb}" verb`,
+    );
+  }
+});
+
+test('Magic 8 Ball probes use HTTP so scenario 06 does not restart the pods', () => {
+  const manifest = stripComments(read('k8s/magic8ball/deployment.yaml'));
+
+  // If liveness used the HTTPS port, an expired certificate would cause a
+  // CrashLoopBackOff and destroy the evidence scenario 06 depends on.
+  const livenessBlock = /livenessProbe:[\s\S]*?failureThreshold: \d+/.exec(manifest)?.[0] ?? '';
+  assert.ok(livenessBlock.includes('port: http'), 'liveness probe must target the HTTP port');
+
+  const readinessBlock = /readinessProbe:[\s\S]*?failureThreshold: \d+/.exec(manifest)?.[0] ?? '';
+  assert.ok(readinessBlock.includes('port: http'), 'readiness probe must target the HTTP port');
+});
+
+test('both Magic 8 Ball access gates are kept in sync by deploy and grant-access', () => {
+  const deploy = read('scripts/deploy.sh');
+  const grant = read('scripts/grant-access.sh');
+  const manifest = stripComments(read('k8s/magic8ball/deployment.yaml'));
+  const network = read('infra/bicep/modules/network.bicep');
+
+  // Magic 8 Ball is reachable only if BOTH the AKS subnet NSG rule and the
+  // Service's loadBalancerSourceRanges permit the caller. An NSG drops rather
+  // than refuses, so drift between them presents as a hang with no error —
+  // which is exactly what makes it worth pinning down in a test.
+  assert.ok(
+    manifest.includes('loadBalancerSourceRanges'),
+    'the magic8ball Service must restrict source ranges',
+  );
+  assert.ok(
+    network.includes('Allow-Magic8Ball-From-Admin'),
+    'the AKS subnet NSG must carry the matching rule',
+  );
+
+  for (const [name, script] of [['deploy.sh', deploy], ['grant-access.sh', grant]]) {
+    assert.ok(
+      script.includes('Allow-Magic8Ball-From-Admin'),
+      `${name} must maintain the AKS subnet NSG rule`,
+    );
+    assert.ok(
+      script.includes('loadBalancerSourceRanges'),
+      `${name} must maintain the Service source ranges`,
+    );
+  }
+});
+
+test('administrator access is a list and deploy prompts rather than assuming', () => {
+  const deploy = read('scripts/deploy.sh');
+  const main = read('infra/bicep/main.bicep');
+  const network = read('infra/bicep/modules/network.bicep');
+
+  assert.ok(main.includes('param adminCidrs array'), 'main.bicep must accept a list of admin CIDRs');
+  assert.ok(network.includes('param adminCidrs array'), 'network.bicep must accept a list of admin CIDRs');
+  assert.ok(
+    !network.includes('sourceAddressPrefix: adminCidr\n'),
+    'network rules must use sourceAddressPrefixes with the list',
+  );
+
+  // The deploying host is frequently not the browsing host, so a silent
+  // auto-detect strands the operator outside their own lab.
+  assert.ok(
+    deploy.includes('Allowed CIDR(s):'),
+    'deploy.sh must prompt for the administrator CIDRs when they are not supplied',
+  );
+  assert.ok(
+    deploy.includes('reconcile_rule'),
+    'deploy.sh must reconcile the admin NSG rules after deployment',
+  );
+});
+
+test('the architecture diagram and docs state the real number of alert rules', () => {
+  const declared = (read('infra/bicep/modules/alerts.bicep').match(/key: '/g) ?? []).length;
+  assert.ok(declared > 0, 'expected alerts.bicep to declare at least one rule');
+
+  for (const path of [
+    'docs/sre-demo-architecture.svg',
+    'README.md',
+    'docs/ARCHITECTURE.md',
+  ]) {
+    const claims = [...read(path).matchAll(/(\d+)\s+scheduled query (?:alert )?rules/g)];
+    assert.ok(claims.length > 0, `${path} should state the alert rule count`);
+    for (const [, claimed] of claims) {
+      assert.equal(
+        Number(claimed),
+        declared,
+        `${path} claims ${claimed} alert rules but alerts.bicep declares ${declared}`,
+      );
+    }
+  }
+});
+
+test('the SRE agent is opt-in and its modes agree across Bicep and deploy.sh', () => {
+  const main = read('infra/bicep/main.bicep');
+  const module = read('infra/bicep/modules/sre-agent.bicep');
+  const deploy = read('scripts/deploy.sh');
+
+  assert.match(
+    main,
+    /param deploySreAgent bool = false/,
+    'the agent must default to off so an ordinary deploy never creates a chargeable agent',
+  );
+  assert.match(main, /module sreAgent .* = if \(deploySreAgent\)/);
+
+  assert.ok(deploy.includes('--with-agent'), 'deploy.sh should expose --with-agent');
+  assert.ok(
+    deploy.includes('deploySreAgent="${WITH_AGENT}"'),
+    'the flag must actually reach the template',
+  );
+
+  // The module enumerates the allowed modes; deploy.sh rejects anything else
+  // before deploying. If one list grows, the other has to.
+  const allowed = [...module.matchAll(/^\s{2}'(ReadOnly|Review|Autonomous)'$/gm)].map((m) => m[1]);
+  assert.deepEqual(allowed, ['ReadOnly', 'Review', 'Autonomous']);
+  for (const mode of allowed) {
+    assert.ok(
+      new RegExp(`\\b${mode}\\b`).test(deploy.match(/case "\$\{AGENT_MODE\}" in[\s\S]*?esac/)[0]),
+      `deploy.sh should accept --agent-mode ${mode}`,
+    );
+  }
+});
+
+test('every deploy.sh flag named in the docs actually exists in deploy.sh', () => {
+  const deploy = read('scripts/deploy.sh');
+  const parser = deploy.match(/while \[\[ \$# -gt 0 \]\]; do[\s\S]*?\ndone/)[0];
+  const usage = deploy.match(/usage\(\) \{[\s\S]*?\nUSAGE\n\}/)[0];
+  const flagsIn = (text) => new Set([...text.matchAll(/(?<![-\w])(--[a-z][a-z-]{2,})/g)].map((m) => m[1]));
+
+  // deploy.sh must accept everything its own help advertises.
+  for (const flag of flagsIn(usage)) {
+    assert.ok(parser.includes(flag), `deploy.sh --help advertises ${flag} but does not parse it`);
+  }
+
+  // ...and so must the Options block in the deployment guide.
+  const options = read('docs/DEPLOYMENT.md').match(/## Options\n+```\n([\s\S]*?)```/)[1];
+  for (const flag of flagsIn(options)) {
+    assert.ok(parser.includes(flag), `DEPLOYMENT.md documents ${flag} but deploy.sh does not parse it`);
+  }
+});
+
+test('the SRE agent settings in .env.example are the ones deploy.sh reads', () => {
+  const env = read('.env.example');
+  const deploy = read('scripts/deploy.sh');
+
+  const declared = [...env.matchAll(/^([A-Z_]*AGENT[A-Z_]*)=/gm)].map((m) => m[1]);
+  assert.ok(declared.length > 0, '.env.example should document the agent settings');
+
+  for (const name of declared) {
+    assert.ok(
+      new RegExp(`\\$\\{${name}:?-`).test(deploy),
+      `.env.example declares ${name} but deploy.sh never reads it`,
+    );
+  }
+});
+
+test('the deploying user is granted access to the agent it creates', () => {
+  const module = read('infra/bicep/modules/sre-agent.bicep');
+  const main = read('infra/bicep/main.bicep');
+
+  // Control-plane Owner does not reach the agent data plane, so without this
+  // assignment the agent deploys but nobody can open it.
+  assert.match(module, /sreAgentAdministratorRoleId = 'e79298df-d852-4c6d-84f9-5d13249d1e55'/);
+  assert.match(module, /resource deployerAgentAdmin 'Microsoft\.Authorization\/roleAssignments/);
+  assert.match(module, /scope: agent/, 'the grant must be scoped to the agent, not the group');
+  assert.match(
+    main,
+    /deployerObjectId: assignRoles \? deployerObjectId : ''/,
+    'the grant must honour assignRoles',
+  );
+});
+
+test('the agent enables both managed identities', () => {
+  const module = read('infra/bicep/modules/sre-agent.bicep');
+
+  // UserAssigned alone still deploys, but the service then creates the agent on
+  // the Public Preview generation. Nothing in the resource reveals it, so this
+  // regression is invisible without the test.
+  assert.match(
+    module,
+    /type: 'SystemAssigned,UserAssigned'/,
+    'dropping the system-assigned identity silently downgrades the agent generation',
+  );
+});
+
+// --- Dynatrace / ServiceNow integration -------------------------------------
+
+test('every sre_demo.* metric a Dynatrace metric event selects is emitted by an app', () => {
+  const tf = read('infra/terraform/integration/dynatrace.tf');
+  const emitters =
+    read('apps/scenario-controller/backend/src/telemetry.ts') + read('apps/magic8ball/backend/src/index.ts');
+
+  const selected = new Set([...tf.matchAll(/"sre_demo\.([a-z0-9_]+):/g)].map((m) => m[1]));
+  // The apps emit sre_demo_<name>; dynatrace.ts maps it to sre_demo.<name>.
+  const emitted = new Set([...emitters.matchAll(/'sre_demo_([a-z0-9_]+)'/g)].map((m) => m[1]));
+
+  assert.ok(selected.size >= 6, `expected the metric events to select custom metrics, found ${selected.size}`);
+  for (const metric of selected) {
+    assert.ok(
+      emitted.has(metric),
+      `dynatrace.tf selects sre_demo.${metric} but no app emits sre_demo_${metric}, ` +
+        'so the metric event can never fire.',
+    );
+  }
+});
+
+test('every Dynatrace metric event is a lab-prefixed problem the alerting profile forwards', () => {
+  const tf = read('infra/terraform/integration/dynatrace.tf');
+  const events = [...tf.matchAll(/^\s+title\s+=\s+"(\d\d [^"]+)"/gm)].map((m) => m[1]);
+  assert.equal(events.length, 8, `expected 8 metric events, found ${events.length}`);
+  for (const id of ['01', '02', '03', '04', '05', '06']) {
+    assert.ok(events.some((t) => t.startsWith(`${id} `)), `scenario ${id} has no Dynatrace metric event`);
+  }
+  assert.match(tf, /title\s+=\s+"\$\{local\.title_prefix\} \$\{each\.value\.title\}"/);
+  assert.match(tf, /value\s+=\s+local\.title_prefix/, 'the alerting profile must filter on the lab title prefix');
+});
+
+test('Dynatrace raises ServiceNow incidents the SRE Agent quickstart plan indexes', () => {
+  // ServiceNow's default lookup gives priority 2 (High) only for impact+urgency <= 3.
+  // The agent's quickstart response plan ignores anything lower.
+  const tf = read('infra/terraform/integration/dynatrace.tf');
+  const impact = Number(tf.match(/"impact":\s*"(\d)"/)[1]);
+  const urgency = Number(tf.match(/"urgency":\s*"(\d)"/)[1]);
+  assert.ok(
+    impact + urgency <= 3,
+    `impact ${impact} + urgency ${urgency} gives priority 3 or lower; the quickstart response plan would ignore it`,
+  );
+  assert.match(tf, /"assignment_group":\s*"\$\{var\.assignment_group\}"/);
+  assert.match(tf, /"correlation_id":\s*"dynatrace-\{PID\}"/, 'reset-lab.sh resolves incidents by this prefix');
+  assert.match(read('scripts/lib-integrations.sh'), /correlation_idSTARTSWITHdynatrace-/);
+});
+
+test('the ServiceNow webhook payload stays valid JSON after Dynatrace substitution', () => {
+  // Dynatrace substitutes placeholders verbatim, without JSON escaping.
+  const tf = read('infra/terraform/integration/dynatrace.tf');
+  const payload = tf.match(/snow_incident_payload = <<-EOT\n([\s\S]*?)\n\s*EOT/)[1];
+  const multiLine = ['ProblemDetailsText', 'ProblemDetailsHTML', 'ProblemDetailsMarkdown', 'ProblemDetailsJSON', 'ImpactedEntities'];
+  for (const p of multiLine) {
+    assert.ok(!payload.includes(`{${p}}`), `{${p}} is multi-line or JSON; unescaped it breaks the incident body`);
+  }
+  const rendered = payload.replace(/\$\{[^}]+\}/g, 'x').replace(/\{[A-Za-z]+\}/g, 'x');
+  assert.doesNotThrow(() => JSON.parse(rendered), 'payload must be JSON once placeholders are filled');
+});
+
+test('every Terraform output the deploy reads is declared', () => {
+  const outputs = read('infra/terraform/integration/outputs.tf');
+  const scripts = read('scripts/lib-integrations.sh') + read('scripts/configure-sre-agent-integrations.sh');
+  const declared = new Set([...outputs.matchAll(/^output "([a-z0-9_]+)"/gm)].map((m) => m[1]));
+  const used = new Set([...scripts.matchAll(/output -raw ([a-z0-9_]+)/g)].map((m) => m[1]));
+  assert.ok(used.size >= 9, `expected the scripts to read the Terraform outputs, found ${used.size}`);
+  for (const name of used) {
+    assert.ok(declared.has(name), `scripts read terraform output "${name}" but outputs.tf does not declare it`);
+  }
+});
+
+test('integration credentials never reach curl argv or compete with it for stdin', () => {
+  const files = [
+    'scripts/lib-integrations.sh',
+    'scripts/configure-sre-agent-integrations.sh',
+    'scripts/validate.sh',
+    'scripts/reset-lab.sh',
+  ];
+  for (const file of files) {
+    const lines = read(file).split('\n');
+    lines.forEach((line, i) => {
+      if (/^\s*#/.test(line)) return;
+      const where = `${file}:${i + 1}`;
+      assert.ok(!/\bcurl\b.*\s(-u|--user)\s/.test(line), `${where} passes credentials to curl with -u`);
+      assert.ok(
+        !/\bcurl\b.*-H\s+["']Authorization/.test(line),
+        `${where} passes an Authorization header on curl argv; use _curl_auth`,
+      );
+      // _curl_auth feeds the credential to `curl -K -`, so piping a body into
+      // dt_api/snow_api/_curl_auth would replace the credential with the body.
+      assert.ok(
+        !/\|\s*\\?\s*(dt_api|snow_api|_curl_auth)\b/.test(line) && !/^\s*\|\s*(dt_api|snow_api|_curl_auth)\b/.test(line),
+        `${where} pipes into a credentialed curl helper; write the body to a file instead`,
+      );
+    });
+  }
+});
+
+test('the DynaKube only instruments the lab namespace', () => {
+  const dynakube = stripComments(read('k8s/dynatrace/dynakube.yaml'));
+  assert.match(dynakube, /cloudNativeFullStack:\s+namespaceSelector:/);
+  assert.match(dynakube, /key:\s*kubernetes\.io\/metadata\.name\s+operator:\s*In\s+values:\s+-\s*sre-demo\s/);
+});
