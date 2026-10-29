@@ -30,7 +30,11 @@ function Find-Bash {
           3. WSL, as a last resort
     #>
     $candidate = Get-Command bash -ErrorAction SilentlyContinue
-    if ($candidate) { return $candidate.Source }
+    # C:\Windows\System32\bash.exe is the WSL launcher, not Git Bash: it cannot open
+    # C:\ paths, so prefer Git Bash and fall back to WSL (with path conversion).
+    $isWslLauncher = $candidate -and $env:SystemRoot -and
+        $candidate.Source.StartsWith("$env:SystemRoot\", [StringComparison]::OrdinalIgnoreCase)
+    if ($candidate -and -not $isWslLauncher) { return $candidate.Source }
 
     $gitBashPaths = @(
         "$env:ProgramFiles\Git\bin\bash.exe",

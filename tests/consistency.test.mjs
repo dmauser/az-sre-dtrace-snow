@@ -495,4 +495,7 @@ test('deploy.ps1 runs the credential setup before deploy.sh, and .env tolerates 
 
   const loader = read('scripts/lib.sh');
   assert.match(loader, /line="\$\{line%\$'\\r'\}"/, 'load_env_file must strip a trailing CR');
+
+  // System32\\bash.exe is the WSL launcher: it cannot run C:\\ paths, so Git Bash must win.
+  assert.match(read('scripts/lib.ps1'), /isWslLauncher[\s\S]*SystemRoot[\s\S]*-not \$isWslLauncher/, 'Find-Bash must skip the System32 WSL launcher');
 });

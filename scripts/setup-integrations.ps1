@@ -234,6 +234,12 @@ try { $bash = Find-Bash; Write-Ok "bash: $bash" } catch { Write-Fail $_.Exceptio
 
 if ($bash) {
     $report = Get-BashToolReport $bash
+    if ($report.Count -eq 0) {
+        Write-Fail "Could not run the tool check through $bash"
+        $bash = $null
+    }
+}
+if ($bash) {
     $missing = @($Tools.Keys | Where-Object {
         -not ($Tools[$_].ContainsKey('NeedsDt') -and $SkipDynatrace) -and
         -not ($report.ContainsKey($_) -and $report[$_].Found) })
