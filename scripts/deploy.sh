@@ -1255,7 +1255,14 @@ MAGIC8BALL_URL="http://${MAGIC8BALL_IP}"
 
 smoke() {
   local label="$1" url="$2"
-  if curl -fsS --max-time 15 "${url}" >/dev/null 2>&1; then ok "${label}"; else fail "${label} (${url})"; fi
+  # Retries: right after the controller restarts, /api/lab/status gathers
+  # component state from Azure and its first call can exceed the timeout.
+  local attempt
+  for attempt in 1 2 3; do
+    if curl -fsS --max-time 30 "${url}" >/dev/null 2>&1; then ok "${label}"; return 0; fi
+    sleep 10
+  done
+  fail "${label} (${url})"
 }
 smoke "Scenario Controller health" "${CONTROLLER_URL}/api/health"
 smoke "Scenario Controller lab status" "${CONTROLLER_URL}/api/lab/status"

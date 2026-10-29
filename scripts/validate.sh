@@ -126,7 +126,11 @@ report "Answer persisted to PostgreSQL" "$(echo "${ANSWER}" | jq -r '.persisted 
 step "TLS"
 CERT_DIR="${REPO_ROOT}/certs"
 if [[ -f "${CERT_DIR}/ca.crt" ]]; then
-  if curl -fsS --max-time 15 --cacert "${CERT_DIR}/ca.crt" \
+  # The demo CA publishes no revocation endpoint. Schannel curl (Git Bash on
+  # Windows) fails closed on that unless revocation checks are turned off.
+  TLS_REVOKE_OPT=()
+  curl -V 2>/dev/null | grep -qi schannel && TLS_REVOKE_OPT=(--ssl-no-revoke)
+  if curl -fsS --max-time 15 ${TLS_REVOKE_OPT[@]+"${TLS_REVOKE_OPT[@]}"} --cacert "${CERT_DIR}/ca.crt" \
        --resolve "magic8ball.sre-demo.local:443:$(state_get magic8ballIp)" \
        "https://magic8ball.sre-demo.local/healthz" >/dev/null 2>&1; then
     report "HTTPS validates against the demo CA" true
@@ -304,10 +308,9 @@ if [[ "$(state_get servicenowEnabled false)" == "true" ]]; then
   SNOW_INSTANCE_URL="$(state_get servicenowInstanceUrl)"
   SNOW_USER="$(state_get servicenowIntegrationUser)"
   SNOW_GROUP="$(state_get servicenowAssignmentGroup)"
-  SNOW_PW="$(az keyvault secret show --subscription "${SUBSCRIPTION_ID}" --vault-name "$(state_get keyVaultName)" \
-    -n servicenow-integration-password --query value -o tsv 2>/dev/null || true)"
+  SNOW_PW="$(snow_integration_password "$(state_get suffix)" "$(state_get keyVaultName)" "${SUBSCRIPTION_ID}")"
   if [[ -z "${SNOW_PW}" ]]; then
-    report "Integration user password in Key Vault" false "servicenow-integration-password"
+    report "Integration user password readable" false "not in Terraform state or Key Vault (servicenow-integration-password)"
   else
     q="$(jq -rn --arg g "${SNOW_GROUP}" '"name=\($g)" | @uri')"
     resp="$(snow_api "${SNOW_USER}" "${SNOW_PW}" GET "/api/now/table/sys_user_group?sysparm_query=${q}&sysparm_fields=sys_id" 2>/dev/null || true)"

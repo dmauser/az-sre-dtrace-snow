@@ -90,7 +90,7 @@ update_rule() {
     existing="$(echo "${json}" | jq -r '
       ([.sourceAddressPrefix] + (.sourceAddressPrefixes // []))
       | map(select(. != null and . != ""))
-      | unique | .[]' 2>/dev/null | tr '\n' ' ')"
+      | unique | .[]' 2>/dev/null | tr -d '\r' | tr '\n' ' ')"
   else
     existing=""
   fi
@@ -151,7 +151,8 @@ step "$([[ "${REVOKE}" == "true" ]] && echo Revoking || echo Granting) ${CIDR} o
 if require_kubectl && [[ -f "${KUBECONFIG_PATH}" ]]; then
   export KUBECONFIG="${KUBECONFIG_PATH}"
   current="$(kubectl -n sre-demo get svc magic8ball -o jsonpath='{.spec.loadBalancerSourceRanges}' 2>/dev/null || echo '[]')"
-  mapfile -t ranges < <(echo "${current}" | jq -r '.[]?' 2>/dev/null || true)
+  # tr: Windows jq ends lines with CRLF, which would glue a \r onto each CIDR.
+  mapfile -t ranges < <(echo "${current}" | jq -r '.[]?' 2>/dev/null | tr -d '\r' || true)
 
   updated=()
   for entry in "${ranges[@]:-}"; do

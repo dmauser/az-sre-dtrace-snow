@@ -137,7 +137,11 @@ rule looks right. Check with `Find-NetRoute -RemoteIPAddress <vm public ip>` (Wi
 pass both to `deploy.sh`, e.g. `--admin-cidr <home ip>/32 --admin-cidr <vpn egress ip>/32`.
 One safe way to find it: temporarily allow an unused port (such as 8099) from `Internet` on the
 app NSG, run `tcpdump -ni eth0 'tcp dst port 8099'` on the VM with `az vm run-command`, connect
-to that port from your machine, read the source address, then delete the rule.
+to that port from your machine 30–40 times, read the source addresses, then delete the rule.
+VPNs often spread connections over **several** egress IPs. If requests succeed and time out
+alternately (controller up, Magic 8 Ball down, then the reverse), one egress IP is missing:
+add each with `./scripts/grant-access.sh --cidr <ip>/32` and put them all in `ADMIN_CIDR`
+(comma-separated) in `.env` so redeploys keep them.
 
 ### Container missing after a restart
 

@@ -599,3 +599,37 @@ test('lib.ps1 argument builders accept the initially empty argument list', () =>
   assert.ok(params.length >= 2, 'expected Add-LabSwitch and Add-LabOption -Arguments parameters');
   for (const p of params) assert.match(p, /\[AllowEmptyCollection\(\)\]/, `missing [AllowEmptyCollection()]: ${p}`);
 });
+
+test('AKS keeps the OIDC issuer on, because governance may enable it and it cannot be turned off', () => {
+  const aks = read('infra/bicep/modules/aks.bicep');
+  const block = aks.match(/oidcIssuerProfile:\s*\{([^}]*)\}/);
+  assert.ok(block, 'aks.bicep must declare oidcIssuerProfile explicitly');
+  assert.match(block[1], /enabled:\s*true/,
+    'oidcIssuerProfile.enabled must be true: once policy enables it, false fails every redeploy with OIDCIssuerFeatureCannotBeDisabled');
+});
+
+test('ServiceNow password is read through the Terraform-first helper, not straight from Key Vault', () => {
+  const lib = read('scripts/lib-integrations.sh');
+  const helper = lib.match(/snow_integration_password\(\) \{([\s\S]*?)\n\}/);
+  assert.ok(helper, 'lib-integrations.sh must define snow_integration_password');
+  assert.ok(helper[1].indexOf('servicenow_integration_password') < helper[1].indexOf('az keyvault'),
+    'Terraform state must be tried before Key Vault (policy often disables the vault\'s public access)');
+  for (const script of ['scripts/validate.sh', 'scripts/reset-lab.sh']) {
+    const body = read(script);
+    assert.doesNotMatch(body, /keyvault secret show[^\n]*\n?[^\n]*servicenow-integration-password/,
+      `${script} must use snow_integration_password instead of reading Key Vault directly`);
+    assert.match(body, /snow_integration_password /, `${script} must call snow_integration_password`);
+  }
+});
+
+test('grant-access.sh strips CR from jq output so Windows jq cannot corrupt CIDR lists', () => {
+  const body = read('scripts/grant-access.sh');
+  const jqLines = body.split('\n').filter((l) => /jq -r/.test(l));
+  assert.ok(jqLines.length >= 2);
+  for (const start of jqLines) {
+    const idx = body.indexOf(start);
+    const stmt = body.slice(idx, body.indexOf(')', body.indexOf("2>/dev/null", idx)) + 40);
+    assert.match(stmt, /tr -d '\\r'/, `jq output must pass through tr -d '\\r': ${start.trim()}`);
+  }
+});
+

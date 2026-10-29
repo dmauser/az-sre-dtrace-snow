@@ -168,12 +168,11 @@ if [[ "$(state_get servicenowEnabled false)" == "true" ]]; then
   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-integrations.sh"
   # shellcheck disable=SC2034  # read by snow_api (lib-integrations.sh)
   SNOW_INSTANCE_URL="$(state_get servicenowInstanceUrl)"
-  SNOW_PW="$(az keyvault secret show --subscription "${SUBSCRIPTION_ID}" --vault-name "$(state_get keyVaultName)" \
-    -n servicenow-integration-password --query value -o tsv 2>/dev/null || true)"
+  SNOW_PW="$(snow_integration_password "$(state_get suffix)" "$(state_get keyVaultName)" "${SUBSCRIPTION_ID}")"
   if [[ -n "${SNOW_PW}" ]]; then
     snow_resolve_lab_incidents "$(state_get servicenowIntegrationUser)" "${SNOW_PW}" "$(state_get servicenowAssignmentGroup)"
   else
-    warn "Could not read servicenow-integration-password from Key Vault; open lab incidents were left as is"
+    warn "Could not read the ServiceNow integration password from Terraform state or Key Vault; open lab incidents were left as is"
   fi
 fi
 

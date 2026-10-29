@@ -103,8 +103,12 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-05-01' = {
       upgradeChannel: 'none'
       nodeOSUpgradeChannel: 'NodeImage'
     }
+    // Enabled because it cannot be turned off once on, and subscription governance
+    // (for example, the Defender for Containers / workload identity policies) may
+    // enable it after the first deploy; false would then fail every redeploy with
+    // OIDCIssuerFeatureCannotBeDisabled. Unused by the lab itself.
     oidcIssuerProfile: {
-      enabled: false
+      enabled: true
     }
     storageProfile: {
       diskCSIDriver: {

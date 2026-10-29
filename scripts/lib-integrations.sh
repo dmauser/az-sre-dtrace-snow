@@ -264,6 +264,22 @@ integrations_preflight() {
 
 _tf() { terraform -chdir="${TF_INTEGRATION_DIR}" "$@"; }
 
+# Prints the ServiceNow integration user's password. Terraform state is the
+# source of truth; Key Vault is only a fallback, because governed subscriptions
+# often disable the vault's public network access by policy.
+#   snow_integration_password <suffix> <key-vault-name> <subscription-id>
+snow_integration_password() {
+  local suffix="$1" vault="$2" subscription="$3" pw=""
+  if [[ -d "${TF_INTEGRATION_DIR}/terraform.tfstate.d/${suffix}" ]] && command -v terraform >/dev/null 2>&1; then
+    pw="$(TF_WORKSPACE="${suffix}" _tf output -raw servicenow_integration_password 2>/dev/null || true)"
+  fi
+  if [[ -z "${pw}" && -n "${vault}" ]]; then
+    pw="$(az keyvault secret show --subscription "${subscription}" --vault-name "${vault}" \
+      -n servicenow-integration-password --query value -o tsv 2>/dev/null || true)"
+  fi
+  printf '%s' "${pw}"
+}
+
 _tf_env() {
   export DYNATRACE_ENV_URL="${DT_CLASSIC_URL}"
   export DYNATRACE_API_TOKEN="${DT_API_TOKEN}"
