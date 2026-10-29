@@ -499,3 +499,9 @@ test('deploy.ps1 runs the credential setup before deploy.sh, and .env tolerates 
   // System32\\bash.exe is the WSL launcher: it cannot run C:\\ paths, so Git Bash must win.
   assert.match(read('scripts/lib.ps1'), /isWslLauncher[\s\S]*SystemRoot[\s\S]*-not \$isWslLauncher/, 'Find-Bash must skip the System32 WSL launcher');
 });
+test('lib.ps1 argument builders accept the initially empty argument list', () => {
+  const lib = read('scripts/lib.ps1');
+  const params = lib.match(/\[Parameter\(Mandatory\)\][^\n]*List\[string\]\][^\n]*\$Arguments/g) ?? [];
+  assert.ok(params.length >= 2, 'expected Add-LabSwitch and Add-LabOption -Arguments parameters');
+  for (const p of params) assert.match(p, /\[AllowEmptyCollection\(\)\]/, `missing [AllowEmptyCollection()]: ${p}`);
+});

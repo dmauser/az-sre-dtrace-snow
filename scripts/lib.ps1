@@ -110,7 +110,7 @@ function Add-LabSwitch {
         switches do not become explicit "false" arguments.
     #>
     param(
-        [Parameter(Mandatory)][System.Collections.Generic.List[string]] $Arguments,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]] $Arguments,
         [Parameter(Mandatory)][bool]   $Condition,
         [Parameter(Mandatory)][string] $Flag
     )
@@ -119,7 +119,7 @@ function Add-LabSwitch {
 
 function Add-LabOption {
     param(
-        [Parameter(Mandatory)][System.Collections.Generic.List[string]] $Arguments,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]] $Arguments,
         [Parameter(Mandatory)][string] $Flag,
         [Parameter()][string]          $Value
     )
