@@ -324,6 +324,7 @@ if ($SkipDynatrace) {
 
         $dtApi = Get-ValidValue -Key 'DT_API_TOKEN' -Prompt 'Dynatrace API token (dt0c01.*)' -Secret -Validate {
             param($v)
+            if ($v -match '^dt0s16\.') { return 'That is a platform token (dt0s16, asked for next). This prompt needs a classic API token (dt0c01) from the Access Tokens app; press Enter to skip it for now.' }
             if ($v -notmatch '^dt0c01\.') { return 'API tokens start with dt0c01.' }
             $body = @{ token = $v } | ConvertTo-Json -Compress
             $r = Invoke-LabHttp POST "$($u.Classic)/api/v2/apiTokens/lookup" @{ Authorization = "Api-Token $v" } $body
