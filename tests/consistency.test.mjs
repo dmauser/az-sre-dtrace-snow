@@ -187,6 +187,27 @@ test('the resource-burner cannot preempt application workloads', () => {
   assert.ok(manifest.includes('replicas: 0'), 'burner must be dormant at baseline');
 });
 
+test('Dynatrace gets a node big enough for it, and scenario 02 is calibrated after it schedules', () => {
+  const deploy = read('scripts/deploy.sh');
+
+  assert.match(
+    deploy,
+    /DYNATRACE_ENABLED:-false}" == "true" \]\]; then AKS_NODE_VCPU=4; else AKS_NODE_VCPU=2; fi/,
+    'a Dynatrace-enabled lab must use a 4 vCPU AKS node; ~1.1 vCPU of Dynatrace pods does not fit a 2 vCPU node',
+  );
+  assert.match(deploy, /AKS_NODE_SIZE:-Standard_D\$\{AKS_NODE_VCPU\}as_v7/, 'the default node SKU must follow AKS_NODE_VCPU');
+  assert.ok(
+    /az aks delete[^\n]*aks-sre-demo-\$\{SUFFIX\}/.test(deploy) && deploy.includes('EXISTING_AKS_SKU}" != "${SELECTED_AKS_SKU}"'),
+    'redeploying with a different node SKU must recreate the cluster; AKS cannot resize a pool in place',
+  );
+
+  const smokeSection = deploy.slice(deploy.indexOf('step "20/20'));
+  const wait = smokeSection.indexOf('\ndynatrace_wait_dynakube\n');
+  const calibrate = smokeSection.indexOf('\ncalibrate_resource_pressure\n');
+  assert.ok(wait >= 0 && calibrate > wait, 'scenario 02 must be calibrated after the DynaKube (OneAgent) pods are scheduled');
+  assert.match(deploy, /set resources deployment\/resource-burner -c resource-burner/, 'calibration must resize the burner');
+});
+
 test('scenario-runner RBAC is namespace-scoped and secret access is enumerated', () => {
   const rbac = stripComments(read('k8s/rbac/scenario-runner.yaml'));
 
@@ -533,8 +554,26 @@ test('integration credentials never reach curl argv or compete with it for stdin
 
 test('the DynaKube only instruments the lab namespace', () => {
   const dynakube = stripComments(read('k8s/dynatrace/dynakube.yaml'));
-  assert.match(dynakube, /cloudNativeFullStack:\s+namespaceSelector:/);
+  assert.match(dynakube, /cloudNativeFullStack:(\n {6}.*)*\n {6}namespaceSelector:/);
   assert.match(dynakube, /key:\s*kubernetes\.io\/metadata\.name\s+operator:\s*In\s+values:\s+-\s*sre-demo\s/);
+});
+
+test('the OneAgent init container injected into lab pods satisfies the sre-demo LimitRange', () => {
+  const toMi = (q) => (q.endsWith('Gi') ? parseFloat(q) * 1024 : parseFloat(q));
+  const dynakube = stripComments(read('k8s/dynatrace/dynakube.yaml'));
+  const init = /initResources:\s+requests:\s+cpu:\s*\S+\s+memory:\s*(\S+)/.exec(dynakube);
+  assert.ok(init, 'set cloudNativeFullStack.initResources; the operator default (30Mi) is below the LimitRange minimum and every lab pod is rejected');
+  const limitRange = stripComments(read('k8s/namespace.yaml'));
+  const min = /min:\s+cpu:\s*\S+\s+memory:\s*(\S+)/.exec(limitRange);
+  assert.ok(min, 'sre-demo LimitRange min memory not found');
+  assert.ok(toMi(init[1]) >= toMi(min[1]), `init container requests ${init[1]}, LimitRange minimum is ${min[1]}`);
+
+  const lib = read('scripts/lib-integrations.sh');
+  assert.ok(dynakube.includes('image: __DT_ONEAGENT_IMAGE__'), 'the OneAgent image must be resolved at deploy time');
+  assert.ok(
+    lib.includes('s|__DT_ONEAGENT_IMAGE__|') && lib.includes('/__DT_ONEAGENT_IMAGE__/d'),
+    'the image placeholder must be substituted, or its line dropped when no image resolves',
+  );
 });
 test('deploy.ps1 runs the credential setup before deploy.sh, and .env tolerates CRLF', () => {
   const deploy = read('scripts/deploy.ps1');

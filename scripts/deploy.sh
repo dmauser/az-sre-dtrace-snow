@@ -273,7 +273,11 @@ ADMIN_CIDR="${ADMIN_CIDRS[*]}"
 
 APP_VM_SIZE="${APP_VM_SIZE:-Standard_B2s}"
 POSTGRES_VM_SIZE="${POSTGRES_VM_SIZE:-Standard_B2s}"
-AKS_NODE_SIZE="${AKS_NODE_SIZE:-Standard_D2as_v7}"
+# Dynatrace (operator, webhook, CSI driver, ActiveGate, OneAgent) requests ~1.1
+# vCPU, more than a 2 vCPU node has left after AKS system pods and the demo
+# apps, so its pods would sit Pending. Use a 4 vCPU node when it is enabled.
+if [[ "${DYNATRACE_ENABLED:-false}" == "true" ]]; then AKS_NODE_VCPU=4; else AKS_NODE_VCPU=2; fi
+AKS_NODE_SIZE="${AKS_NODE_SIZE:-Standard_D${AKS_NODE_VCPU}as_v7}"
 AKS_BASELINE_NODE_COUNT="${AKS_BASELINE_NODE_COUNT:-1}"
 
 step "7/20  Validating VM SKU availability and quota"
@@ -322,19 +326,21 @@ sku_family() {
 }
 
 # v7 D-series first: current generation, widely available and the cheapest
-# 2 vCPU / 8 GB option. Older generations follow as fallbacks for regions or
+# option at the required size (2 vCPU / 8 GB, or 4 vCPU / 16 GB with Dynatrace). Older generations follow as fallbacks for regions or
 # subscriptions where v7 is not yet offered.
 #
 # B-series is deliberately excluded for AKS: burstable CPU credits make capacity
 # behaviour non-deterministic, which would make scenario 02 inconsistent to
 # demonstrate.
+n="${AKS_NODE_VCPU}"
 AKS_SKU_CANDIDATES=(
   "${AKS_NODE_SIZE}"
-  Standard_D2as_v7 Standard_D2s_v7 Standard_D2ads_v7 Standard_D2ds_v7
-  Standard_D2as_v6 Standard_D2s_v6
-  Standard_D2as_v5 Standard_D2s_v5 Standard_D2ads_v5
-  Standard_D2s_v4 Standard_D2as_v4 Standard_DS2_v2
+  "Standard_D${n}as_v7" "Standard_D${n}s_v7" "Standard_D${n}ads_v7" "Standard_D${n}ds_v7"
+  "Standard_D${n}as_v6" "Standard_D${n}s_v6"
+  "Standard_D${n}as_v5" "Standard_D${n}s_v5" "Standard_D${n}ads_v5"
+  "Standard_D${n}s_v4" "Standard_D${n}as_v4" "Standard_DS$(( n == 4 ? 3 : 2 ))_v2"
 )
+unset n
 SELECTED_AKS_SKU=""
 for candidate in "${AKS_SKU_CANDIDATES[@]}"; do
   [[ -n "${candidate}" ]] || continue
@@ -349,6 +355,18 @@ if [[ "${SELECTED_AKS_SKU}" != "${AKS_NODE_SIZE}" ]]; then
   warn "Substituting AKS node SKU ${AKS_NODE_SIZE} -> ${SELECTED_AKS_SKU} (regional/subscription availability)"
 else
   ok "AKS node SKU ${SELECTED_AKS_SKU} is available"
+fi
+
+if [[ "${DYNATRACE_ENABLED:-false}" == "true" ]]; then
+  sel_vcpu="$(jq -r --arg n "${SELECTED_AKS_SKU}" \
+    'first(.[] | select(.name == $n) | .capabilities[]? | select(.name == "vCPUs") | .value) // empty' \
+    <<<"${SKU_CACHE_JSON}" 2>/dev/null)"
+  if [[ "${sel_vcpu}" =~ ^[0-9]+$ ]] && (( sel_vcpu < 4 )); then
+    warn "AKS node ${SELECTED_AKS_SKU} has ${sel_vcpu} vCPU; Dynatrace needs ~1.1 vCPU and its pods will likely stay Pending."
+    warn "Remove AKS_NODE_SIZE from .env (deploy then picks a 4 vCPU SKU) or set a 4 vCPU SKU."
+    confirm "Continue with ${SELECTED_AKS_SKU} anyway?" || die "Cancelled."
+  fi
+  unset sel_vcpu
 fi
 
 for candidate in "${APP_VM_SIZE}" "${POSTGRES_VM_SIZE}"; do
@@ -371,7 +389,11 @@ family_headroom() {
 }
 
 AKS_FAMILY="$(sku_family "${SELECTED_AKS_SKU}")"
-AKS_VCPUS_NEEDED=$(( 2 * AKS_BASELINE_NODE_COUNT + 2 ))   # +2 for the scenario 02 scale-out
+AKS_SKU_VCPUS="$(jq -r --arg n "${SELECTED_AKS_SKU}" \
+  'first(.[] | select(.name == $n) | .capabilities[]? | select(.name == "vCPUs") | .value) // empty' \
+  <<<"${SKU_CACHE_JSON}" 2>/dev/null)"
+[[ "${AKS_SKU_VCPUS}" =~ ^[0-9]+$ ]] || AKS_SKU_VCPUS="${AKS_NODE_VCPU}"
+AKS_VCPUS_NEEDED=$(( AKS_SKU_VCPUS * (AKS_BASELINE_NODE_COUNT + 1) ))   # +1 node for the scenario 02 scale-out
 if [[ -n "${AKS_FAMILY}" ]]; then
   HEADROOM="$(family_headroom "${AKS_FAMILY}")"
   if [[ "${HEADROOM}" != "unknown" ]] && (( HEADROOM < AKS_VCPUS_NEEDED )); then
@@ -487,6 +509,21 @@ fi
 step "13/20  Deploying Azure infrastructure (Bicep)"
 DEPLOYER_OBJECT_ID="$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)"
 [[ -n "${DEPLOYER_OBJECT_ID}" ]] || DEPLOYER_OBJECT_ID="$(az account show --query user.name -o tsv | xargs -I{} az ad sp show --id {} --query id -o tsv 2>/dev/null || true)"
+
+# AKS cannot change a node pool's VM size in place, so redeploying an existing
+# lab with a different node SKU (e.g. after enabling Dynatrace, which needs the
+# 4 vCPU node) would fail inside Bicep. Detect it here and recreate the cluster:
+# it holds no state that the rest of this script does not redeploy.
+EXISTING_AKS_SKU="$(az aks nodepool show --subscription "${SUBSCRIPTION_ID}" -g "${RESOURCE_GROUP}" \
+  --cluster-name "aks-sre-demo-${SUFFIX}" -n system --query vmSize -o tsv 2>/dev/null || true)"
+if [[ -n "${EXISTING_AKS_SKU}" && "${EXISTING_AKS_SKU}" != "${SELECTED_AKS_SKU}" ]]; then
+  warn "Existing AKS cluster uses ${EXISTING_AKS_SKU}; this deployment needs ${SELECTED_AKS_SKU}, which AKS cannot change in place."
+  confirm "Delete and recreate AKS cluster aks-sre-demo-${SUFFIX}?" \
+    || die "Cancelled. Set AKS_NODE_SIZE=${EXISTING_AKS_SKU} to keep the existing cluster."
+  az aks delete --subscription "${SUBSCRIPTION_ID}" -g "${RESOURCE_GROUP}" -n "aks-sre-demo-${SUFFIX}" --yes \
+    || die "Failed to delete AKS cluster aks-sre-demo-${SUFFIX}"
+  ok "Deleted AKS cluster; Bicep will recreate it on ${SELECTED_AKS_SKU}"
+fi
 
 DEPLOYMENT_NAME="sre-demo-${SUFFIX}-$(date -u +%Y%m%d%H%M%S)"
 deploy_infra() {
@@ -907,6 +944,40 @@ ok "Demo CA plus valid and expired server certificates created"
 
 # --- 18. Kubernetes workloads ----------------------------------------------
 
+# Scenario 02 needs two burner replicas to schedule (real CPU starvation) and the
+# rest to stay Pending. The headroom that decides this differs by node SKU and by
+# what else runs (Dynatrace adds ~1.1 vCPU), so the burner's CPU request is set
+# from the measured headroom rather than hard-coded: 0.4 x free CPU, so two fit
+# and a third does not. Must run after every baseline pod (OneAgent included) is
+# scheduled.
+calibrate_resource_pressure() {
+  local nodes alloc used free req
+  nodes="$(kubectl get nodes -o json)" || { warn "Could not read nodes; scenario 02 keeps its default sizing"; return 0; }
+  alloc="$(jq '[.items[] | .status.allocatable.cpu
+            | if endswith("m") then (.[:-1] | tonumber) else (tonumber * 1000) end] | max // 0' <<<"${nodes}")"
+  used="$(kubectl get pods -A -o json | jq --arg node "$(jq -r '.items[0].metadata.name' <<<"${nodes}")" '
+    def milli: if . == null then 0 elif endswith("m") then (.[:-1] | tonumber) else (tonumber * 1000) end;
+    [.items[]
+      | select(.spec.nodeName == $node)
+      | select(.status.phase != "Succeeded" and .status.phase != "Failed")
+      | select(.metadata.labels.app != "resource-burner")
+      | [.spec.containers[].resources.requests.cpu | milli] | add // 0] | add // 0')" \
+    || { warn "Could not read pod requests; scenario 02 keeps its default sizing"; return 0; }
+  free=$(( alloc - used ))
+  req=$(( free * 2 / 5 ))
+  # >= 50m to stay a meaningful request; <= 550m so 6 replicas plus the apps stay
+  # inside the sre-demo ResourceQuota (requests.cpu 4) and pods go Pending, not
+  # FailedCreate.
+  (( req < 50 )) && req=50
+  (( req > 550 )) && req=550
+  kubectl -n sre-demo set resources deployment/resource-burner -c resource-burner \
+    --requests="cpu=${req}m" >/dev/null \
+    || { warn "Could not size the scenario 02 burner"; return 0; }
+  ok "Scenario 02 calibrated: ${free}m CPU free on the baseline node, burner requests ${req}m (2 of 6 replicas fit)"
+  (( free < 125 )) && warn "Only ${free}m CPU is free at baseline; scenario 02 will show Pending pods but little CPU load."
+  return 0
+}
+
 step "18/20  Deploying Kubernetes workloads"
 
 # The operator's webhook must exist before sre-demo pods start, or they run
@@ -1191,6 +1262,7 @@ smoke "Scenario Controller lab status" "${CONTROLLER_URL}/api/lab/status"
 smoke "Magic 8 Ball health" "${MAGIC8BALL_URL}/healthz"
 smoke "Magic 8 Ball version" "${MAGIC8BALL_URL}/api/version"
 dynatrace_wait_dynakube
+calibrate_resource_pressure
 
 cat > "${STATE_FILE}" <<STATE
 {

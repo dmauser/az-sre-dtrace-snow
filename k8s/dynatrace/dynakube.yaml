@@ -20,6 +20,19 @@ spec:
   oneAgent:
     hostGroup: __DT_AKS_HOST_GROUP__
     cloudNativeFullStack:
+      # Public-registry image resolved by deploy (dt_resolve_oneagent_image);
+      # the line is dropped to fall back to the environment registry.
+      image: __DT_ONEAGENT_IMAGE__
+      # The injected install-oneagent init container defaults to a 30Mi memory
+      # request, below the sre-demo LimitRange minimum (32Mi), which makes the
+      # API server reject every lab pod. Size it explicitly within that range.
+      initResources:
+        requests:
+          cpu: 30m
+          memory: 32Mi
+        limits:
+          cpu: 300m
+          memory: 64Mi
       namespaceSelector:
         matchExpressions:
           - key: kubernetes.io/metadata.name

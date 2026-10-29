@@ -352,6 +352,35 @@ integrations_destroy() {
   fi
 }
 
+# The environment's built-in registry only serves OneAgent images Dynatrace has
+# built for it; right after an agent release it can advertise a version with no
+# image ("No bootstrapping-image found"), leaving the OneAgent pod in
+# ImagePullBackOff. So the image comes from Dynatrace's public registry instead:
+# the newest non-FIPS tag whose major.minor is no newer than the environment's
+# latest agent (an agent must not be newer than its cluster). Prints nothing if
+# either lookup fails, which falls back to the environment registry.
+dt_resolve_oneagent_image() {
+  local repo="public.ecr.aws/dynatrace/dynatrace-oneagent" resp env_ver ecr_tok tag
+  resp="$(_curl_auth header "Authorization: Api-Token ${DT_OPERATOR_API_TOKEN}" "" -sS --max-time 30 \
+    "${DT_CLASSIC_URL}/api/v1/deployment/installer/agent/versions/unix/paas" 2>/dev/null)" || return 0
+  env_ver="$(jq -r '.availableVersions // [] | map(split(".")[0:2] | map(tonumber)) | max // empty | map(tostring) | join(".")' \
+    <<<"${resp}" 2>/dev/null)" || return 0
+  [[ -n "${env_ver}" ]] || return 0
+  ecr_tok="$(curl -sS --max-time 30 "https://public.ecr.aws/token/?scope=repository:dynatrace/dynatrace-oneagent:pull" \
+    2>/dev/null | jq -r '.token // empty')" || return 0
+  [[ -n "${ecr_tok}" ]] || return 0
+  tag="$(_curl_auth header "Authorization: Bearer ${ecr_tok}" "" -sS --max-time 30 \
+      "https://public.ecr.aws/v2/dynatrace/dynatrace-oneagent/tags/list?n=1000" 2>/dev/null \
+    | jq -r --arg env "${env_ver}" '
+        ($env | split(".") | map(tonumber)) as $max
+        | [.tags[]? | select(test("^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]{8}-[0-9]{6}$"))
+           | {t: ., v: (split("-")[0] | split(".") | map(tonumber))}
+           | select(.v[0:2] <= $max)]
+        | max_by(.v) | .t // empty' 2>/dev/null)" || return 0
+  [[ -n "${tag}" ]] && printf '%s:%s' "${repo}" "${tag}"
+  return 0
+}
+
 # Installs the Dynatrace Operator (pinned release manifest, no Helm needed) and
 # the lab DynaKube. Must run before the sre-demo workloads are created so their
 # pods are injected on first start.
@@ -376,10 +405,21 @@ dynatrace_install_operator() {
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   rm -rf "${tokdir}"
 
+  local oneagent_image image_sed
+  oneagent_image="$(dt_resolve_oneagent_image)"
+  if [[ -n "${oneagent_image}" ]]; then
+    info "OneAgent image: ${oneagent_image}"
+    image_sed="s|__DT_ONEAGENT_IMAGE__|${oneagent_image}|g"
+  else
+    warn "Could not resolve a public OneAgent image; using the Dynatrace environment registry"
+    image_sed="/__DT_ONEAGENT_IMAGE__/d"
+  fi
+
   # The webhook can report Ready a few seconds before it serves admission calls.
   local attempt
   for attempt in 1 2 3 4 5 6; do
-    if sed -e "s|__DT_API_URL__|${DT_CLASSIC_URL}/api|g" \
+    if sed -e "${image_sed}" \
+           -e "s|__DT_API_URL__|${DT_CLASSIC_URL}/api|g" \
            -e "s|__DT_AKS_HOST_GROUP__|${DT_AKS_HOST_GROUP}|g" \
            -e "s|__LAB_SUFFIX__|${SUFFIX}|g" \
            "${REPO_ROOT}/k8s/dynatrace/dynakube.yaml" | kubectl apply -f - >/dev/null 2>&1; then

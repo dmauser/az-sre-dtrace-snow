@@ -107,6 +107,10 @@ creates the connector, so a wrong token fails there with a clear message.
 | Workflow `sre-demo-<suffix>-servicenow` — latest | Davis problem trigger on `event.name` matching the prefix; creates the same incident as the webhook (idempotent on `correlation_id`) |
 | OneAgent | both VMs (host group `sre-demo-vm-<suffix>`), AKS cloud-native full stack on namespace `sre-demo` (host group `sre-demo-aks-<suffix>`) |
 
+The Dynatrace pods request ~1.1 vCPU, so a Dynatrace-enabled lab runs AKS on one 4 vCPU node
+(`Standard_D4as_v7`, ~$0.10/hr more than the 2 vCPU default). Scenario 02 is calibrated to the
+remaining headroom at deploy time, so it behaves the same on either size.
+
 Because the alerting profile / workflow trigger filters on the title prefix, several labs (or other workloads)
 can share one Dynatrace environment without paging each other's ServiceNow queue.
 

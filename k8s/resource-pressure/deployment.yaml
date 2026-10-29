@@ -6,12 +6,9 @@
 # which is what makes both operations idempotent and keeps the runner's RBAC
 # down to "patch deployments".
 #
-# Sizing note: the requests below are what actually creates the incident. On a
-# single 2 vCPU node roughly 1.1 cores remain after system workloads, so at
-# 300m per replica only about three replicas can be scheduled and the rest stay
-# Pending. The CPU limit of 500m keeps the node loaded but still responsive, so
-# Magic 8 Ball degrades rather than disappears — a degradation is far more
-# instructive to investigate than a hard outage.
+# Sizing note: the requests below are what actually creates the incident; see
+# the note above the containers. Magic 8 Ball degrades rather than disappears —
+# a degradation is far more instructive to investigate than a hard outage.
 # -----------------------------------------------------------------------------
 apiVersion: apps/v1
 kind: Deployment
@@ -47,9 +44,10 @@ spec:
       priorityClassName: sre-demo-low-priority
       terminationGracePeriodSeconds: 5
 # Sizing note: these numbers are what create the incident, and the gap between
-# them is deliberate. The node has ~1900m allocatable and system workloads plus
-# the demo apps already request ~1617m, leaving roughly 283m. At a 100m request
-# only two replicas fit; the rest stay Pending. Those two then consume up to
+# them is deliberate. The 100m request below is only a default: deploy.sh
+# (calibrate_resource_pressure) resets it to 0.4 x the CPU left on the node
+# after system pods, the demo apps and Dynatrace, so two replicas fit and the
+# rest stay Pending on any node size. Those two then consume up to
 # 900m each, so the node genuinely saturates and Magic 8 Ball degrades.
 #
 # Under-requesting while over-consuming is exactly how noisy-neighbour incidents

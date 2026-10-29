@@ -351,7 +351,7 @@ docs/AZURE-SRE-AGENT-SETUP.md for both once the lab is up.
 | Demo data disk | 16 GB StandardSSD | Scenario 01 target, mounted at `/var/sre-demo`. |
 | PostgreSQL VM | `Standard_B2s`, Ubuntu 24.04 LTS | Private-only database, `max_connections` 50. |
 | PostgreSQL data disk | 32 GB StandardSSD | Cluster data directory. |
-| AKS | 1 node, `Standard_D2as_v7` (validated per region) | Magic 8 Ball, scenario-runner, resource-burner. |
+| AKS | 1 node, `Standard_D2as_v7` — `Standard_D4as_v7` when Dynatrace is enabled (validated per region) | Magic 8 Ball, scenario-runner, resource-burner. |
 | Container Registry | Basic | Five lab images. Admin account disabled; pulls use Entra ID. |
 | Log Analytics workspace | PerGB2018, 30-day retention, 2 GB/day cap | Single pane for all telemetry. |
 | Application Insights | Workspace-based | Application requests, dependencies, exceptions, custom metrics. |
@@ -374,7 +374,7 @@ agreement.
 | Component | Running | Stopped |
 |---|---|---|
 | 2 × B2s VMs | ~$0.10/hr | $0 |
-| 1 × D2as_v7 AKS node | ~$0.10/hr | $0 |
+| 1 × D2as_v7 AKS node (D4as_v7 with Dynatrace) | ~$0.10/hr (~$0.20/hr) | $0 |
 | AKS control plane (Free tier) | $0 | $0 |
 | Managed disks (~145 GB total) | ~$0.02/hr | ~$0.02/hr |
 | 2 × Standard public IP, 2 × load balancer | ~$0.02/hr | ~$0.02/hr |

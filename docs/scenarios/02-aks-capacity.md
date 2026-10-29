@@ -29,22 +29,24 @@ next door.
 
 ```mermaid
 flowchart TB
-    subgraph node ["Single AKS node — 2 vCPU / 8 GB"]
+    subgraph node ["Single AKS node — 2 vCPU (4 vCPU with Dynatrace)"]
         sys["kube-system pods<br/>~800m CPU requested"]
         m8["magic8ball × 2<br/>100m each"]
         runner["scenario-runner<br/>50m"]
-        burn["resource-burner<br/>300m requested, 500m limit"]
+        burn["resource-burner<br/>calibrated request, 900m limit"]
     end
     pending["Pending pods<br/>Unschedulable: insufficient cpu"]
     ci["Container Insights"]
     alert["Node pressure + pending pods alerts"]
 
-    burn -.->|"only ~3 of 6 fit"| pending
+    burn -.->|"only 2 of 6 fit"| pending
     node --> ci --> alert
 ```
 
-Roughly 1.1 cores remain after system workloads. At 300m per replica only about three burner
-replicas can be scheduled; the rest stay Pending.
+The CPU left on the node depends on its size and on what else runs there (Dynatrace adds ~1.1
+vCPU, which is why a Dynatrace-enabled lab uses a 4 vCPU node). So `deploy.sh` measures it after
+every baseline pod is scheduled and sets the burner's CPU request to 0.4 × the free CPU
+(`calibrate_resource_pressure`): two replicas fit, the rest stay Pending.
 
 **The cluster autoscaler is disabled deliberately.** With it enabled, the cluster would quietly
 add a node and there would be no incident to investigate — which is itself worth discussing,
@@ -236,7 +238,7 @@ does not silently leave a second node billing.
 | Limit | Value | Why |
 |---|---|---|
 | Maximum burner replicas | 8 (`MAX_BURNER_REPLICAS`) | Enforced by scenario-runner, whatever is requested |
-| CPU request / limit | 100m / 900m | Two replicas fit; each is still capped below a full core |
+| CPU request / limit | Calibrated at deploy (50–550m; 100m in the manifest) / 900m | Two replicas fit; each is still capped below a full core |
 | Memory request / limit | 256Mi / 512Mi | Fixed allocation, no leak |
 | Namespace ResourceQuota | 4 CPU / 6Gi requests | Hard ceiling for everything in `sre-demo` |
 | LimitRange max per container | 1 CPU / 1Gi | No single container can request more |

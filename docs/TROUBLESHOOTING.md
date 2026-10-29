@@ -129,6 +129,16 @@ az network nsg rule update -g $RG --nsg-name nsg-app-<suffix> \
   --name Allow-SSH-Admin --source-address-prefixes "$(curl -s https://api.ipify.org)/32"
 ```
 
+**Corporate VPN that tunnels Azure ranges.** Some VPN clients (for example, a split tunnel that
+routes Azure public IP ranges through the corporate network) send traffic to the lab from a
+different egress IP than the one `api.ipify.org` reports, so the NSG drops it even though the
+rule looks right. Check with `Find-NetRoute -RemoteIPAddress <vm public ip>` (Windows) or
+`ip route get <vm public ip>` (Linux). If it goes through the VPN, find the VPN egress IP and
+pass both to `deploy.sh`, e.g. `--admin-cidr <home ip>/32 --admin-cidr <vpn egress ip>/32`.
+One safe way to find it: temporarily allow an unused port (such as 8099) from `Internet` on the
+app NSG, run `tcpdump -ni eth0 'tcp dst port 8099'` on the VM with `az vm run-command`, connect
+to that port from your machine, read the source address, then delete the rule.
+
 ### Container missing after a restart
 
 It runs with `--restart unless-stopped`, so it should return with the VM. If not:
@@ -344,6 +354,12 @@ kubectl -n dynatrace logs deploy/dynatrace-operator --tail=50
 
 The webhook pod must be ready before the DynaKube is applied. If the operator was upgraded
 or installed by hand, re-run `deploy.sh`; the install is idempotent.
+
+`dynatrace-webhook` pods `Pending` with `Insufficient cpu` (and the operator stuck in its
+`crd-storage-migrator` init container) mean the node is too small: Dynatrace requests ~1.1 vCPU.
+`deploy.sh` uses a 4 vCPU node (`Standard_D4as_v7`) whenever Dynatrace is enabled. A lab first
+deployed on the 2 vCPU node is fixed by re-running `deploy.sh`: it detects the SKU change and,
+after confirmation, recreates the AKS cluster (AKS cannot resize a node pool in place).
 
 ### Dynatrace problem, but no ServiceNow incident
 
