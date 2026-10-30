@@ -58,6 +58,18 @@ param kubernetesVersion string = ''
 @description('Size of the dedicated demo data disk targeted by scenario 01.')
 param demoDataDiskSizeGb int = 16
 
+@description('Disk SKU for the app VM disks. deploy.sh reuses the existing SKU on redeploy.')
+param appVmDiskSku string = 'StandardSSD_LRS'
+
+@description('Disk SKU for the PostgreSQL VM disks. deploy.sh reuses the existing SKU on redeploy.')
+param postgresVmDiskSku string = 'StandardSSD_LRS'
+
+@description('True when the app VM already exists (deploy.sh detects it); its cloud-init customData is then left untouched.')
+param appVmExists bool = false
+
+@description('True when the PostgreSQL VM already exists (deploy.sh detects it); its cloud-init customData is then left untouched.')
+param postgresVmExists bool = false
+
 @description('PostgreSQL connection ceiling. Low on purpose so scenario 04 saturates quickly.')
 param postgresMaxConnections int = 50
 
@@ -173,6 +185,8 @@ module postgresVm 'modules/postgres-vm.bicep' = {
     appPassword: postgresAppPassword
     scenarioPassword: postgresScenarioPassword
     maxConnections: postgresMaxConnections
+    diskSku: postgresVmDiskSku
+    vmExists: postgresVmExists
     allowedClientCidrs: [
       network.outputs.appSubnetPrefix
       network.outputs.aksSubnetPrefix
@@ -191,6 +205,8 @@ module appVm 'modules/app-vm.bicep' = {
     adminUsername: adminUsername
     adminPublicKey: adminPublicKey
     demoDataDiskSizeGb: demoDataDiskSizeGb
+    diskSku: appVmDiskSku
+    vmExists: appVmExists
     identityId: security.outputs.identityId
     dataCollectionRuleId: monitoring.outputs.dataCollectionRuleId
   }

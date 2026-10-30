@@ -109,7 +109,12 @@ identity is created with **no role assignments**; run `scripts/enable-sre-remedi
 grant access. SRE Agent is not offered in every region — notably not in `eastus` — so step 5b
 validates the region up front and lists the valid ones rather than failing mid-deployment.
 With Dynatrace enabled it also runs `scripts/configure-sre-agent-integrations.sh` (Dynatrace
-MCP connector, ServiceNow portal values) once the deployment state is written.
+MCP connector, ServiceNow incident platform and response plan) once the deployment state is written.
+
+**Redeploying over an existing lab** keeps the VMs as they are: `deploy.sh` reuses the disks'
+current SKU (subscription cost automation sometimes converts deallocated VMs to
+`Standard_LRS`, and a VM cannot change disk SKU in place) and omits cloud-init `customData`
+for VMs that already exist (ARM rejects any change to it, even a CRLF/LF difference).
 
 **Dynatrace and ServiceNow** are enabled when `DT_ENV_URL` / `SNOW_INSTANCE_URL` are set in
 `.env`. Preflight (step 1) verifies the API token scopes and the ServiceNow admin login

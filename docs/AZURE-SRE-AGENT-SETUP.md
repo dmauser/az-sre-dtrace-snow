@@ -440,11 +440,15 @@ Once connected, the agent can call tools such as `query-problems`, `get-problem-
 [DYNATRACE-SETUP.md](DYNATRACE-SETUP.md#3-platform-token--dt_platform_token-dt0s16).
 The API version can be overridden with `SRE_AGENT_CONNECTOR_API_VERSION`.
 
-**ServiceNow (portal).** The agent's incident platform setting has no basic-auth fields in
-ARM. The script tests the integration user and then prints what to enter under **Builder →
-Incident platform → ServiceNow**. See [SERVICENOW-SETUP.md](SERVICENOW-SETUP.md#3-connect-azure-sre-agent-portal).
-Once this is saved, incidents that Dynatrace raises reach the agent with no prompting: at
-**priority 2** and in the **SRE Demo Lab** group, they are picked up within about a minute.
+The script then confirms from the agent's side that the connector is **Connected** and lists
+its tools (`GET /api/v2/extendedAgent/connectors/dynatrace-mcp/tools`). ARM returns the
+connector's endpoint as `null`; that is redaction, not a missing value.
+
+**ServiceNow (automated).** The script sets the agent's incident platform to ServiceNow with
+the `sre_demo_integration` user, waits for the agent to connect, scopes indexing to the
+**SRE Demo Lab** group and creates the `servicenow-lab-response-plan` response plan
+(priority 1–2, review mode). See [SERVICENOW-SETUP.md](SERVICENOW-SETUP.md#3-connect-azure-sre-agent-automated).
+Incidents that Dynatrace raises then reach the agent with no prompting, within about a minute.
 
 > Only one incident platform can be active. Connecting ServiceNow replaces Azure Monitor as the
 > agent's incident source; the Azure Monitor alerts keep firing for side-by-side comparison.

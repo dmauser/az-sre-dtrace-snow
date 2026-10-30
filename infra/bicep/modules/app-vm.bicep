@@ -38,6 +38,17 @@ param adminPublicKey string
 @maxValue(128)
 param demoDataDiskSizeGb int = 16
 
+@description('Managed disk SKU for the OS and data disks. deploy.sh passes the existing SKU on redeploy: a VM cannot change its disk SKU in place.')
+@allowed([
+  'Standard_LRS'
+  'StandardSSD_LRS'
+  'Premium_LRS'
+])
+param diskSku string = 'StandardSSD_LRS'
+
+@description('True when the VM already exists. cloud-init only runs on first boot and ARM rejects any change to customData, so it is omitted on redeploy.')
+param vmExists bool = false
+
 @description('Resource ID of the user-assigned managed identity used to call the Azure control plane.')
 param identityId string
 
@@ -115,7 +126,8 @@ runcmd:
   - touch /var/log/sre-demo-bootstrap-complete
 '''
 
-var cloudInitRendered = replace(cloudInit, '__MOUNT_PATH__', demoMountPath)
+// Strip CR so a CRLF checkout renders the same customData as an LF one.
+var cloudInitRendered = replace(replace(cloudInit, '__MOUNT_PATH__', demoMountPath), '\r', '')
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2023-11-01' = {
   name: 'pip-sre-app-${suffix}'
@@ -183,7 +195,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-09-01' = {
         caching: 'ReadWrite'
         diskSizeGB: 32
         managedDisk: {
-          storageAccountType: 'StandardSSD_LRS'
+          storageAccountType: diskSku
         }
       }
       dataDisks: [
@@ -194,7 +206,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-09-01' = {
           caching: 'None'
           diskSizeGB: demoDataDiskSizeGb
           managedDisk: {
-            storageAccountType: 'StandardSSD_LRS'
+            storageAccountType: diskSku
           }
         }
       ]
@@ -202,7 +214,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-09-01' = {
     osProfile: {
       computerName: vmName
       adminUsername: adminUsername
-      customData: base64(cloudInitRendered)
+      customData: vmExists ? null : base64(cloudInitRendered)
       linuxConfiguration: {
         disablePasswordAuthentication: true
         ssh: {

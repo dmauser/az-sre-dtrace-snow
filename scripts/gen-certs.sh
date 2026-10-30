@@ -28,7 +28,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 # breaks the real file paths (-keyout/-out) passed to the same openssl calls.
 # MSYS2_ARG_CONV_EXCL only exempts arguments starting with this exact prefix,
 # leaving normal path conversion intact everywhere else.
-export MSYS2_ARG_CONV_EXCL="/C="
+export MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:+${MSYS2_ARG_CONV_EXCL};}/C="
 
 CERT_DIR="${REPO_ROOT}/certs"
 COMMON_NAME="${MAGIC8BALL_CN:-magic8ball.sre-demo.local}"

@@ -45,21 +45,33 @@ The integration user's password is stored in the lab Key Vault as
 `destroy-lab.sh` deletes the group and the user. Incidents are kept as history.
 `reset-lab.sh` resolves the lab's open incidents.
 
-## 3. Connect Azure SRE Agent (portal)
+## 3. Connect Azure SRE Agent (automated)
 
-The ARM API has no basic-auth fields for the ServiceNow incident platform, so this step is
-manual. `deploy.sh --with-agent` (or `./scripts/configure-sre-agent-integrations.sh`) prints
-the exact values and saves the password to `.secrets/servicenow-integration-<suffix>.txt`,
-which is git-ignored.
+`deploy.sh --with-agent` runs `./scripts/configure-sre-agent-integrations.sh`, which makes the
+same calls as the portal's **Builder → Incident platform → ServiceNow** dialog:
 
-1. Open the agent at [sre.azure.com](https://sre.azure.com) → **Builder** → **Incident platform**.
-2. Choose **ServiceNow**.
-3. **ServiceNow endpoint**: `https://<instance>.service-now.com`.
-4. **Authentication**: *Basic*. Username `sre_demo_integration`; password from the file above.
-5. **Assignment group**: `SRE Demo Lab`.
-6. Tick **Quickstart response plan**. It indexes **High (P2)** incidents, which is why the
-   Dynatrace routing sets urgency 1.
-7. Save. The agent polls ServiceNow every minute.
+1. **ARM** `PATCH Microsoft.App/agents/<agent>` (api `2026-01-01`) →
+   `incidentManagementConfiguration`: `type: ServiceNow`, the instance URL, and
+   `connectionKey` set to the JSON document `{"username":"sre_demo_integration","password":"..."}`
+   (write-only; ARM returns it empty). `oboUser` carries a `sreagent-config-revision:<uuid>`
+   marker, as the portal sends.
+2. **Agent data plane** `GET /api/v2/incidentManagement/checkConnectivityDetailed`, polled
+   until `success: true` (up to 3 minutes).
+3. `PUT /api/v2/incidents/indexing/servicenow/configuration` → assignment group
+   `SRE Demo Lab`, 30-day lookback (`SNOW_ASSIGNMENT_GROUP`, `SNOW_LOOKBACK_DAYS`).
+4. `PUT /api/v2/incidentManagement/incidentFilters/servicenow-lab-response-plan` → a response
+   plan that hands **priority 1–2** ServiceNow incidents to the agent in **review** mode
+   (`SNOW_RESPONSE_PRIORITIES`, `SRE_RESPONSE_PLAN_MODE=autonomous` to let it act unprompted).
+   The Dynatrace routing sets urgency 1 so its incidents are priority 2.
+
+Re-running the script is safe. Every redeploy re-applies it, because the Bicep deployment
+resets the agent's incident platform. `validate.sh` checks the result from the agent's side
+(**Azure SRE Agent integrations** section).
+
+If a step fails the script prints the portal fallback: **Builder → Incident platform →
+ServiceNow**, *Basic* auth, user `sre_demo_integration`, password from
+`.secrets/servicenow-integration-<suffix>.txt` (git-ignored; `--show-password` prints it),
+assignment group `SRE Demo Lab`, **Quickstart response plan** ticked.
 
 > **Only one incident platform can be active.** If the agent was connected to Azure Monitor
 > alerts, connecting ServiceNow replaces that. Azure Monitor alerts still fire and are still
@@ -68,7 +80,7 @@ which is git-ignored.
 ## 4. End-to-end check
 
 ```bash
-./scripts/validate.sh                       # ServiceNow section: login + group
+./scripts/validate.sh    # ServiceNow: login + group; SRE Agent: connected + response plan
 ```
 
 Then inject scenario 03 or 05 from the console. Within roughly 5 minutes you should see:
@@ -83,5 +95,5 @@ Then inject scenario 03 or 05 from the console. Within roughly 5 minutes you sho
 |---|---|
 | Preflight: `HTTP 401` from ServiceNow | wrong admin password, or the PDI is hibernating (it may also redirect to a login page) |
 | Problem raised, no incident | Classic: **Settings → Integration → Problem notifications** → `sre-demo-<suffix>-servicenow` → **Send test notification**. Latest: **Workflows** → `sre-demo-<suffix>-servicenow` → executions |
-| Incident created, agent ignores it | priority not 2, wrong assignment group, or the quickstart plan is not enabled |
+| Incident created, agent ignores it | priority not 1–2, wrong assignment group, or the response plan is not enabled — `validate.sh` shows which; re-run `configure-sre-agent-integrations.sh` |
 | Incident priority is 3 | the instance's priority lookup was customised; change `urgency` in `dynatrace.tf` |

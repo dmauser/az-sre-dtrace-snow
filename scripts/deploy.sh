@@ -525,6 +525,33 @@ if [[ -n "${EXISTING_AKS_SKU}" && "${EXISTING_AKS_SKU}" != "${SELECTED_AKS_SKU}"
   ok "Deleted AKS cluster; Bicep will recreate it on ${SELECTED_AKS_SKU}"
 fi
 
+# A VM cannot change its disk SKU through the VM resource
+# (OperationNotAllowed on osDisk.managedDisk.storageAccountType), and disks are
+# sometimes converted outside the lab (e.g. subscription cost automation moving
+# deallocated VMs to Standard_LRS). Redeploy with whatever SKU the disks have now.
+existing_disk_sku() {
+  local sku
+  sku="$(az disk show --subscription "${SUBSCRIPTION_ID}" -g "${RESOURCE_GROUP}" -n "$1" \
+    --query sku.name -o tsv 2>/dev/null | tr -d '\r' || true)"
+  printf '%s' "${sku:-StandardSSD_LRS}"
+}
+APP_VM_DISK_SKU="$(existing_disk_sku "osdisk-sre-app-${SUFFIX}")"
+POSTGRES_VM_DISK_SKU="$(existing_disk_sku "osdisk-sre-pg-${SUFFIX}")"
+for disk_sku in "${APP_VM_DISK_SKU}" "${POSTGRES_VM_DISK_SKU}"; do
+  [[ "${disk_sku}" == "StandardSSD_LRS" ]] \
+    || warn "Existing VM disks use ${disk_sku} (lab default StandardSSD_LRS); keeping ${disk_sku} because a VM cannot change disk SKU in place"
+done
+
+# ARM rejects any change to an existing VM's osProfile.customData
+# (PropertyChangeNotAllowed) - even a CRLF/LF difference from another checkout.
+# cloud-init only runs on first boot, so existing VMs are deployed without it.
+vm_exists() {
+  [[ -n "$(az vm show --subscription "${SUBSCRIPTION_ID}" -g "${RESOURCE_GROUP}" -n "$1" \
+    --query id -o tsv 2>/dev/null | tr -d '\r' || true)" ]] && echo true || echo false
+}
+APP_VM_EXISTS="$(vm_exists "vm-sre-app-${SUFFIX}")"
+POSTGRES_VM_EXISTS="$(vm_exists "vm-sre-pg-${SUFFIX}")"
+
 DEPLOYMENT_NAME="sre-demo-${SUFFIX}-$(date -u +%Y%m%d%H%M%S)"
 deploy_infra() {
   local assign_roles="$1"
@@ -546,6 +573,10 @@ deploy_infra() {
       aksBaselineNodeCount="${AKS_BASELINE_NODE_COUNT}" \
       kubernetesVersion="${K8S_VERSION}" \
       demoDataDiskSizeGb="${DEMO_DATA_DISK_GB:-16}" \
+      appVmDiskSku="${APP_VM_DISK_SKU}" \
+      postgresVmDiskSku="${POSTGRES_VM_DISK_SKU}" \
+      appVmExists="${APP_VM_EXISTS}" \
+      postgresVmExists="${POSTGRES_VM_EXISTS}" \
       postgresMaxConnections="${POSTGRES_MAX_CONNECTIONS:-50}" \
       deployerObjectId="${DEPLOYER_OBJECT_ID}" \
       assignRoles="${assign_roles}" \
@@ -1364,12 +1395,7 @@ if [[ -n "${SRE_AGENT_NAME}" ]]; then
   5. Follow docs/AZURE-SRE-AGENT-SETUP.md to connect GitHub and run the first investigation.
 "
   if [[ "${SERVICENOW_ENABLED}" == "true" ]]; then
-    if [[ "${AGENT_INTEGRATIONS_OK}" == "true" ]]; then
-      SRE_AGENT_NEXT_STEP+="  6. Finish the ServiceNow incident platform in the agent portal using the
-     values printed above (docs/SERVICENOW-SETUP.md). Reprint them with:
-     ./scripts/configure-sre-agent-integrations.sh
-"
-    else
+    if [[ "${AGENT_INTEGRATIONS_OK}" != "true" ]]; then
       SRE_AGENT_NEXT_STEP+="  6. Connect the agent to ServiceNow and Dynatrace (docs/SERVICENOW-SETUP.md):
      ./scripts/configure-sre-agent-integrations.sh
 "

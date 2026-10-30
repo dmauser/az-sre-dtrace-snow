@@ -10,6 +10,14 @@
 
 set -euo pipefail
 
+# Git Bash/MSYS rewrites arguments that look like absolute paths, so an Azure
+# resource ID such as --scope /subscriptions/... reaches az as
+# C:/Program Files/Git/subscriptions/... (MissingSubscription). Exempt ARM IDs.
+case ";${MSYS2_ARG_CONV_EXCL:-};" in
+  *";/subscriptions/;"*) ;;
+  *) export MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:+${MSYS2_ARG_CONV_EXCL};}/subscriptions/" ;;
+esac
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })"
 STATE_FILE="${REPO_ROOT}/.lab-state.json"
 

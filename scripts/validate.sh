@@ -322,6 +322,34 @@ if [[ "$(state_get servicenowEnabled false)" == "true" ]]; then
   fi
 fi
 
+# --- Azure SRE Agent --------------------------------------------------------
+
+AGENT_NAME="$(state_get sreAgentName)"
+if [[ -n "${AGENT_NAME}" && ( "$(state_get dynatraceEnabled false)" == "true" || "$(state_get servicenowEnabled false)" == "true" ) ]]; then
+  step "Azure SRE Agent integrations"
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-integrations.sh"
+  if ! sre_dp_init "$(state_get sreAgentEndpoint)" "${SUBSCRIPTION_ID}"; then
+    report "Agent ${AGENT_NAME} data plane reachable" false "no endpoint or token"
+  else
+    if [[ "$(state_get dynatraceEnabled false)" == "true" ]]; then
+      body="$(sre_dp GET /api/v2/extendedAgent/connectors/dynatrace-mcp/tools | _http_body)"
+      st="$(jq -r '.connectionStatus // "missing"' 2>/dev/null <<<"${body}" || echo missing)"
+      nt="$(jq -r '.tools | length' 2>/dev/null <<<"${body}" || echo 0)"
+      report "Agent connected to Dynatrace MCP" "$([[ "${st}" == "Connected" && "${nt:-0}" -gt 0 ]] && echo true || echo false)" \
+        "${st}, ${nt:-0} tools; fix with ./scripts/configure-sre-agent-integrations.sh"
+    fi
+    if [[ "$(state_get servicenowEnabled false)" == "true" ]]; then
+      body="$(sre_dp GET /api/v2/incidentManagement/checkConnectivityDetailed | _http_body)"
+      report "Agent connected to ServiceNow" \
+        "$(jq -e '.success == true and .incidentType == "ServiceNow"' >/dev/null 2>&1 <<<"${body}" && echo true || echo false)" \
+        "$(jq -r '.errorMessage // .observedConnectionStatus // "not configured"' 2>/dev/null <<<"${body}" || echo 'not configured')"
+      body="$(sre_dp GET /api/v2/incidentManagement/incidentFilters | _http_body)"
+      report "ServiceNow response plan enabled" \
+        "$(jq -e '[.value[]? | select(.properties.incidentPlatform == "ServiceNow" and .properties.isEnabled == true)] | length > 0' >/dev/null 2>&1 <<<"${body}" && echo true || echo false)"
+    fi
+  fi
+fi
+
 # --- Summary ----------------------------------------------------------------
 
 printf '\n%s%s%s\n' "${C_BOLD}" "----------------------------------------" "${C_RESET}"

@@ -336,6 +336,28 @@ one.
 detail is in [DYNATRACE-SETUP.md](DYNATRACE-SETUP.md#troubleshooting) and
 [SERVICENOW-SETUP.md](SERVICENOW-SETUP.md#troubleshooting).
 
+### SRE Agent not connected to Dynatrace or ServiceNow
+
+`validate.sh` → **Azure SRE Agent integrations** checks the agent's own view: the
+`dynatrace-mcp` connector is `Connected`, ServiceNow `checkConnectivityDetailed` succeeds, and
+the response plan is enabled. Any failure: re-run `./scripts/configure-sre-agent-integrations.sh`.
+A Bicep redeploy resets the agent's incident platform, so `deploy.sh` always re-applies it.
+
+The connector's `endpoint` shows as `null` in ARM and in the portal JSON view. That is
+redaction; the connector's `/tools` route is the real check.
+
+### Redeploy fails on the VMs
+
+| Error | Cause / fix |
+|---|---|
+| Disk SKU change not allowed | Something (often subscription cost automation) converted the disks to `Standard_LRS`. `deploy.sh` now reads the current SKU and keeps it |
+| `PropertyChangeNotAllowed` on `osProfile.customData` | cloud-init differs from what the VM was created with (even CRLF vs LF). `deploy.sh` now omits `customData` for VMs that already exist |
+
+### `MissingSubscription` from `az role assignment create` in Git Bash
+
+MSYS rewrote `--scope /subscriptions/...` into a Windows path. `lib.sh` exports
+`MSYS2_ARG_CONV_EXCL` with `/subscriptions/`; scripts that source it are covered.
+
 ### Preflight rejects the token or credentials
 
 Preflight stops the deployment before anything is created in Azure. The message names the

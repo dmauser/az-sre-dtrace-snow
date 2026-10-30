@@ -176,6 +176,24 @@ snow_api() {
 _http_code() { tail -n1; }
 _http_body() { sed '$d'; }
 
+# --- Azure SRE Agent data plane ---------------------------------------------
+# sre_dp_init <agent endpoint> <subscription>, then
+# sre_dp <METHOD> <path> [json body] -> response body, newline, HTTP status.
+# Unknown routes return the portal's HTML with 200, so callers parse the body.
+SRE_DP_RESOURCE="59f0a04a-b322-4310-adc9-39ac41e9631e"
+sre_dp_init() {
+  SRE_DP_ENDPOINT="${1%/}"
+  SRE_DP_TOKEN="$(az account get-access-token --subscription "$2" --resource "${SRE_DP_RESOURCE}" \
+    --query accessToken -o tsv 2>/dev/null | tr -d '\r' || true)"
+  [[ -n "${SRE_DP_ENDPOINT}" && -n "${SRE_DP_TOKEN}" ]]
+}
+sre_dp() {
+  local args=(-sS --max-time 60 -w '\n%{http_code}' -X "$1" -H 'Accept: application/json')
+  [[ $# -ge 3 ]] && args+=(-H 'Content-Type: application/json' --data-binary "$3")
+  printf 'header = "Authorization: Bearer %s"\n' "${SRE_DP_TOKEN}" \
+    | curl -K - "${args[@]}" "${SRE_DP_ENDPOINT}$2" 2>/dev/null || printf '\n000'
+}
+
 # Decides what is enabled, then checks reachability and credentials up front so
 # a typo fails in seconds rather than after a 15 minute Bicep deployment.
 integrations_preflight() {

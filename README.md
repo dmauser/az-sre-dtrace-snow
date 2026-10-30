@@ -196,7 +196,7 @@ flowchart LR
 | Dynatrace Operator + DynaKube on AKS | `deploy.sh` | `k8s/dynatrace/dynakube.yaml`, `scripts/lib-integrations.sh` |
 | `sre_demo.*` custom metrics | the apps | `apps/*/backend/src/dynatrace.ts` |
 | SRE Agent → Dynatrace MCP connector | `configure-sre-agent-integrations.sh` (ARM) | runs automatically with `--with-agent` |
-| SRE Agent → ServiceNow incident platform | **portal** (no public API for basic auth) | values printed by the same script |
+| SRE Agent → ServiceNow incident platform + response plan | `configure-sre-agent-integrations.sh` (ARM + agent API) | runs automatically with `--with-agent` |
 
 Terraform state is local and per lab (`terraform.tfstate.d/<suffix>/`), so several labs can
 share one Dynatrace environment and one ServiceNow instance without touching each other.
@@ -534,10 +534,10 @@ Analytics, Azure Monitor and AKS diagnostics, and running the first investigatio
 
 **Dynatrace and ServiceNow.** With `--with-agent`, `deploy.sh` runs
 `./scripts/configure-sre-agent-integrations.sh`, which adds a `dynatrace-mcp` connector to
-the agent (the Dynatrace remote MCP server, authenticated with `DT_PLATFORM_TOKEN`) and
-prints the values for the one portal step: **Builder → Incident platform → ServiceNow**, basic
-auth with the Terraform-created `sre_demo_integration` user, assignment group `SRE Demo Lab`,
-**Quickstart response plan** ticked. See [docs/SERVICENOW-SETUP.md](docs/SERVICENOW-SETUP.md).
+the agent (the Dynatrace remote MCP server, authenticated with `DT_PLATFORM_TOKEN`) and sets
+the agent's incident platform to ServiceNow (basic auth with the Terraform-created
+`sre_demo_integration` user, assignment group `SRE Demo Lab`) with a response plan for
+priority 1–2 incidents. No portal step is needed. See [docs/SERVICENOW-SETUP.md](docs/SERVICENOW-SETUP.md).
 
 The GitHub connector consent is interactive in most tenants. The lab deploys completely
 without it and tells you precisely which step remains.

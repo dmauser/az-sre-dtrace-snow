@@ -633,3 +633,44 @@ test('grant-access.sh strips CR from jq output so Windows jq cannot corrupt CIDR
   }
 });
 
+test('redeploys keep existing VMs as they are (disk SKU and cloud-init)', () => {
+  const main = read('infra/bicep/main.bicep');
+  const deploy = read('scripts/deploy.sh');
+  for (const [mod, prefix] of [['app-vm', 'appVm'], ['postgres-vm', 'postgresVm']]) {
+    const bicep = read(`infra/bicep/modules/${mod}.bicep`);
+    assert.match(bicep, /storageAccountType: diskSku/, `${mod}: disks must use the diskSku parameter`);
+    assert.doesNotMatch(bicep, /storageAccountType: '/, `${mod}: hard-coded disk SKU breaks redeploys`);
+    assert.match(bicep, /customData: vmExists \? null : base64\(/, `${mod}: customData must be omitted for an existing VM`);
+    assert.match(bicep, /'\\r', ''\)/, `${mod}: cloud-init must be CR-stripped`);
+    for (const p of [`${prefix}DiskSku`, `${prefix}Exists`]) {
+      assert.match(main, new RegExp(`param ${p} `), `main.bicep must declare ${p}`);
+      assert.match(deploy, new RegExp(`\\b${p}="\\$\\{`), `deploy.sh must pass ${p}`);
+    }
+  }
+});
+
+test('Git Bash never rewrites Azure resource IDs into Windows paths', () => {
+  assert.match(read('scripts/lib.sh'), /MSYS2_ARG_CONV_EXCL=.*\/subscriptions\//);
+  // gen-certs adds its own exemption; it must append, not replace.
+  assert.match(read('scripts/gen-certs.sh'), /MSYS2_ARG_CONV_EXCL="\$\{MSYS2_ARG_CONV_EXCL:\+/);
+});
+
+test('the SRE agent is wired to ServiceNow the way the portal does it', () => {
+  const cfg = read('scripts/configure-sre-agent-integrations.sh');
+  // Basic auth: connectionKey is a JSON document, not the bare password.
+  assert.match(cfg, /connectionKey: \(\{username: \$u, password: \$p\} \| tojson\)/);
+  assert.match(cfg, /sreagent-config-revision:\$\{REVISION\}/);
+  assert.match(cfg, /\/api\/v2\/incidentManagement\/checkConnectivityDetailed/);
+  assert.match(cfg, /\/api\/v2\/incidents\/indexing\/servicenow\/configuration/);
+  assert.match(cfg, /\/api\/v2\/incidentManagement\/incidentFilters\/\$\{RESPONSE_PLAN_ID\}/);
+  assert.match(cfg, /type: "IncidentFilter"/);
+  // Workflow incidents are impact 2 / urgency 1 = priority 2; the plan must pick them up.
+  const tf = read('infra/terraform/integration/dynatrace.tf');
+  assert.match(tf, /"impact": "2",\s*"urgency": "1"/);
+  assert.match(cfg, /SNOW_RESPONSE_PRIORITIES:-[^}]*\b2\b/);
+  // validate.sh checks both integrations from the agent's side.
+  const val = read('scripts/validate.sh');
+  assert.match(val, /connectors\/dynatrace-mcp\/tools/);
+  assert.match(val, /checkConnectivityDetailed/);
+});
+
