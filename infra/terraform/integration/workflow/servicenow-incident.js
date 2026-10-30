@@ -9,6 +9,11 @@
 // scripts/lib-integrations.sh, reset-lab.sh and the SRE Agent):
 //   assignment_group = CONFIG.assignmentGroup, impact 2 + urgency 1 (priority 2 - High),
 //   correlation_id   = "dynatrace-" + problem display id.
+//
+// The trigger fires on open and on close. Open creates the incident (once); close
+// resolves it, unless a human or the SRE Agent already did. Nothing else resolves it:
+// the agent leaves it In Progress after a mitigation, and the scenario reset only
+// reverts the fault.
 import { execution } from '@dynatrace-sdk/automation-utils';
 import { credentialVaultClient } from '@dynatrace-sdk/client-classic-environment-v2';
 
@@ -32,6 +37,7 @@ export default async function ({ execution_id }) {
   if (!title.toLowerCase().startsWith(CONFIG.titlePrefix.toLowerCase())) {
     return { created: false, skipped: 'not a ' + CONFIG.titlePrefix + ' problem', title };
   }
+  const closed = String(problem['event.status'] ?? '').toUpperCase() === 'CLOSED';
 
   const problemId = String(problem['event.id'] ?? '');
   const displayId = String(problem['display_id'] ?? problemId);
@@ -47,7 +53,7 @@ export default async function ({ execution_id }) {
 
   // Retries and re-triggers must not open a second incident for one problem.
   const lookup = await fetch(
-    table + '?sysparm_fields=number,sys_id&sysparm_limit=1&sysparm_query=' +
+    table + '?sysparm_fields=number,sys_id,state&sysparm_limit=1&sysparm_query=' +
       encodeURIComponent('correlation_id=' + correlationId),
     { headers },
   );
@@ -55,6 +61,29 @@ export default async function ({ execution_id }) {
     throw new Error('ServiceNow incident lookup failed: HTTP ' + lookup.status + ' ' + (await lookup.text()));
   }
   const existing = (await lookup.json()).result ?? [];
+
+  if (closed) {
+    const inc = existing[0];
+    // 6 Resolved, 7 Closed, 8 Canceled: leave whoever closed it in charge.
+    if (!inc || Number(inc.state) >= 6) {
+      return { resolved: false, skipped: inc ? 'already resolved' : 'no incident', number: inc?.number, correlationId };
+    }
+    const upd = await fetch(table + '/' + inc.sys_id, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        state: '6',
+        close_code: 'Resolved by caller',
+        close_notes: 'Dynatrace problem ' + displayId + ' closed: the monitored condition recovered. ' +
+          'Resolved automatically by the Dynatrace workflow ' + CONFIG.workflowName + '.',
+      }),
+    });
+    if (!upd.ok) {
+      throw new Error('ServiceNow incident resolve failed: HTTP ' + upd.status + ' ' + (await upd.text()));
+    }
+    return { resolved: true, number: inc.number, sys_id: inc.sys_id, correlationId };
+  }
+
   if (existing.length > 0) {
     return { created: false, number: existing[0].number, sys_id: existing[0].sys_id, correlationId };
   }

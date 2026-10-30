@@ -500,6 +500,12 @@ test('the platform workflow only routes lab problems and raises the same inciden
   const cred = platform.match(/resource "dynatrace_credentials" "servicenow" \{[\s\S]*?\n\}/)?.[0] ?? '';
   assert.match(cred, /allow_contextless_requests\s*=\s*true/, 'the ServiceNow credential must allow contextless (event-triggered) requests');
   assert.ok(!/password\s*[:=]\s*['"]/.test(js), 'no literal password in the workflow script');
+  // Nothing else resolves the incident (the agent leaves it In Progress after a mitigation),
+  // so the workflow must also run on close and resolve it there.
+  assert.match(platform, /trigger_on\s*=\s*"open-and-close"/, 'the workflow must also fire when the problem closes');
+  assert.match(js, /=== 'CLOSED'/, 'the script must branch on a closed problem');
+  assert.match(js, /state: '6'/, 'a closed problem resolves the incident');
+  assert.match(js, /Number\(inc\.state\) >= 6/, 'never reopen or overwrite an incident someone already resolved');
   // ex.event() rejects with 403 on manual runs; un-awaited, that escapes the try as an
   // unhandled rejection and fails the task before the title check (seen live).
   for (const call of js.split('\n').filter((l) => /ex\.event\(\)/.test(l) && !l.trim().startsWith('//'))) {

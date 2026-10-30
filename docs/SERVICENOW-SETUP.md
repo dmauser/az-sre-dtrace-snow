@@ -40,6 +40,8 @@ The integration user's password is stored in the lab Key Vault as
 - **Dynatrace problem routing** — the problem webhook (classic) or the workflow, which reads
   it from the Dynatrace credential vault (latest Dynatrace). Either sends `POST /api/now/table/incident` with impact 2 /
   urgency 1, which gives **priority 2 – High**, and sets `correlation_id = dynatrace-<problem id>`.
+  The workflow also runs when the problem closes and resolves that incident (state 6,
+  `Resolved by caller`) unless it is already resolved.
 - **Azure SRE Agent** incident platform (basic auth, below).
 
 `destroy-lab.sh` deletes the group and the user. Incidents are kept as history.
