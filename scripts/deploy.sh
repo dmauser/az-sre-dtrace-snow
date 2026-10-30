@@ -710,7 +710,9 @@ printf '     AKS    : %s (k8s %s)\n' "${AKS_NAME}" "${AKS_K8S_VERSION}"
 # side effect of deploying. Read access is the exception: without it the agent
 # is created but can see nothing at all, which is not a useful default and is
 # not a decision anyone would reasonably want to make by hand every time. Write
-# access (Contributor) remains manual and separate: scripts/enable-sre-remediation.sh.
+# access (Contributor) is granted by scripts/enable-sre-remediation.sh: manually
+# in Review/ReadOnly mode, automatically only when --agent-mode Autonomous was
+# passed, since asking for autonomy is that conscious choice (see below).
 #
 # This is also the role set the Azure portal's own "Managed resources" ->
 # "Add resource group" flow grants for Permission level "Reader" — matching it
@@ -1371,6 +1373,19 @@ cat > "${STATE_FILE}" <<STATE
 STATE
 chmod 600 "${STATE_FILE}"
 
+# An Autonomous agent with read-only roles would investigate, decide on a fix
+# and then fail to apply it. --agent-mode Autonomous is the explicit opt-in to
+# write access, so grant Contributor at the demo resource group (never wider).
+AGENT_REMEDIATION_OK=false
+if [[ -n "${SRE_AGENT_NAME}" && -n "${SRE_AGENT_PRINCIPAL_ID}" && "${SRE_AGENT_MODE}" == "Autonomous" ]]; then
+  step "Granting the Autonomous SRE Agent remediation access (Contributor, resource group scope)"
+  if ASSUME_YES=true "${REPO_ROOT}/scripts/enable-sre-remediation.sh" --agent-principal-id "${SRE_AGENT_PRINCIPAL_ID}"; then
+    AGENT_REMEDIATION_OK=true
+  else
+    warn "Could not grant Contributor; re-run ./scripts/enable-sre-remediation.sh --agent-principal-id ${SRE_AGENT_PRINCIPAL_ID}"
+  fi
+fi
+
 AGENT_INTEGRATIONS_OK=false
 if [[ -n "${SRE_AGENT_NAME}" && "${DYNATRACE_ENABLED}" == "true" ]]; then
   step "Connecting the SRE Agent to Dynatrace and ServiceNow"
@@ -1397,9 +1412,16 @@ if [[ -n "${SRE_AGENT_NAME}" ]]; then
   SRE_AGENT_SUMMARY="  SRE Agent           : ${SRE_AGENT_NAME} (${SRE_AGENT_REGION}, mode ${SRE_AGENT_MODE})
   SRE Agent UI        : ${SRE_AGENT_ENDPOINT}
 "
-  SRE_AGENT_NEXT_STEP="  4. Grant the agent access to this resource group:
+  if [[ "${AGENT_REMEDIATION_OK}" == "true" ]]; then
+    SRE_AGENT_NEXT_STEP="  4. The agent is Autonomous with Contributor on this resource group. Revoke after the demo:
+     ./scripts/enable-sre-remediation.sh --agent-principal-id ${SRE_AGENT_PRINCIPAL_ID} --revoke
+"
+  else
+    SRE_AGENT_NEXT_STEP="  4. Grant the agent access to this resource group:
      ./scripts/enable-sre-remediation.sh --agent-principal-id ${SRE_AGENT_PRINCIPAL_ID}
-  5. Follow docs/AZURE-SRE-AGENT-SETUP.md to connect GitHub and run the first investigation.
+"
+  fi
+  SRE_AGENT_NEXT_STEP+="  5. Follow docs/AZURE-SRE-AGENT-SETUP.md to connect GitHub and run the first investigation.
 "
   if [[ "${SERVICENOW_ENABLED}" == "true" ]]; then
     if [[ "${AGENT_INTEGRATIONS_OK}" != "true" ]]; then

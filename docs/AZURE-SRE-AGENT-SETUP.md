@@ -577,15 +577,73 @@ az role assignment create --assignee "$AGENT_PRINCIPAL_ID" --role "Contributor" 
 - Does not permit: anything outside the demo resource group. There is no subscription-scope
   grant anywhere in this lab.
 
-> Mitigation actions remain **approval-controlled**. Azure SRE Agent proposes a change and waits
-> for a human to approve it before acting. Contributor makes the action *possible*; it does not
-> make it automatic. Keep approval enabled for demonstrations — watching the agent propose a
-> precise, well-reasoned change and asking for consent is usually the most persuasive part.
+> In **Review** mode (the default) mitigation actions remain **approval-controlled**: the agent
+> proposes a change and waits for a human to approve it. Contributor makes the action
+> *possible*; it does not make it automatic. Watching the agent propose a precise,
+> well-reasoned change and ask for consent is usually the most persuasive demo.
+>
+> In **Autonomous** mode (`deploy.sh --agent-mode Autonomous`) the agent applies the fix itself,
+> and the deployment runs this script for you — see the next section.
 
 To revoke afterwards:
 
 ```bash
 az role assignment delete --assignee "$AGENT_PRINCIPAL_ID" --role "Contributor" --scope "$SCOPE"
+```
+
+---
+
+## Autonomous end-to-end test (Scenario 05)
+
+Issue → Dynatrace problem → ServiceNow incident → agent investigates → agent fixes → incident
+updated, with no human in the loop.
+
+### Enable it
+
+```bash
+./scripts/deploy.sh ... --with-agent --agent-mode Autonomous --yes
+```
+
+`--agent-mode Autonomous` does three things, all from the deployment scripts:
+
+| What | Where |
+|---|---|
+| Agent `actionConfiguration.mode = Autonomous` | Bicep (`sreAgentMode`) |
+| ServiceNow response plan `agentMode = autonomous` (follows the agent mode recorded in `.lab-state.json`; override with `SRE_RESPONSE_PLAN_MODE`) | `configure-sre-agent-integrations.sh` |
+| **Contributor** on the demo resource group only, granted *before* the response plan starts routing incidents | `deploy.sh` → `enable-sre-remediation.sh` |
+
+Without the Contributor grant an autonomous agent still investigates, decides on the fix, and
+then fails to apply it with `AuthorizationFailed`.
+
+### Why Scenario 05
+
+The fix is a single, safe, reversible ARM call inside the resource group — delete the injected
+NSG rule — so it works with Contributor alone:
+
+| Scenario | Autonomous fix possible? |
+|---|---|
+| 05 NSG blocks PostgreSQL | **Yes** — `az network nsg rule delete -g <rg> --nsg-name nsg-db-<suffix> -n sre-demo-deny-postgres` |
+| 02 CPU / pending pods | Yes, but slow (node pool scale-out) and adds cost |
+| 03, 06 | Need Kubernetes write (rollback / restart); the agent holds AKS *read* roles only |
+| 04 | Needs killing database sessions — not an ARM operation |
+| 01 | Needs deleting files on the VM — run-command is diagnostic-only by design |
+
+### Run it
+
+1. Activate Scenario 05 in the controller UI (or `POST /api/scenarios/05/activate`).
+2. Within ~5–10 minutes Dynatrace opens **`[sre-demo-<suffix>] 05 PostgreSQL dependency
+   failures`**, and the workflow creates a **P2** incident in group **SRE Demo Lab**.
+3. The response plan hands the incident to the agent; it confirms the failure in Dynatrace,
+   finds `sre-demo-deny-postgres` on `nsg-db-<suffix>`, and deletes it.
+4. The controller shows PostgreSQL healthy again; the agent writes its findings and the action
+   taken back to the incident.
+5. Reset the scenario in the controller afterwards.
+
+When finished, return to the safer default:
+
+```bash
+./scripts/enable-sre-remediation.sh --agent-principal-id <id> --revoke
+./scripts/deploy.sh ... --with-agent --agent-mode Review --yes
 ```
 
 ---
@@ -603,6 +661,8 @@ az role assignment delete --assignee "$AGENT_PRINCIPAL_ID" --role "Contributor" 
 | Agent cannot query the cluster | Cluster User role missing | Grant it, plus RBAC Reader if Azure RBAC is enabled |
 | ServiceNow incident never picked up | Wrong priority or group, or quickstart plan off | Must be P2 in **SRE Demo Lab**; see [SERVICENOW-SETUP.md](SERVICENOW-SETUP.md#troubleshooting) |
 | Agent says it has no Dynatrace tools | Connector missing or token rejected | Re-run `configure-sre-agent-integrations.sh`; check platform token scopes |
+| Autonomous agent finds the fix but `AuthorizationFailed` applying it | No Contributor on the resource group | `enable-sre-remediation.sh --agent-principal-id <id>`; `deploy.sh --agent-mode Autonomous` does this automatically |
+| Agent is Autonomous but still waits for approval | Response plan still `review` | Re-run `configure-sre-agent-integrations.sh` (it follows the agent mode) |
 
 Lab-level problems: **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**.
 
@@ -643,7 +703,8 @@ Still yours to do, on purpose:
    (see [section 2](#2-connect-the-private-github-repository)).
 2. **Grant the agent write access** — `scripts/enable-sre-remediation.sh`, kept a separate
    command so that giving an automated agent write access is never a side effect of deploying
-   a demo. Read access (above) is automatic; write access never is.
+   a demo. The one exception is `--agent-mode Autonomous`: asking for an unattended agent is
+   the explicit opt-in, so the deployment grants Contributor (resource group scope) for you.
 
 Everything else — infrastructure, applications, telemetry, alert rules, scenarios — is fully
 automated.

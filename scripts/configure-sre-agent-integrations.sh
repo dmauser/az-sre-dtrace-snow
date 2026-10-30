@@ -216,8 +216,16 @@ SNOW_LOOKBACK_DAYS="${SNOW_LOOKBACK_DAYS:-30}"
 # ServiceNow priorities the response plan picks up. The Dynatrace workflow
 # opens incidents with impact 2 / urgency 1, which ServiceNow rates priority 2.
 SNOW_RESPONSE_PRIORITIES="${SNOW_RESPONSE_PRIORITIES:-1,2}"
-# review = the agent investigates on its own but asks before changing anything.
-RESPONSE_PLAN_MODE="${SRE_RESPONSE_PLAN_MODE:-review}"
+# Follows the agent's mode (deploy.sh --agent-mode) unless overridden:
+#   review     = investigates on its own, asks before changing anything
+#   autonomous = investigates and remediates without waiting for approval
+#   readonly   = investigates only
+RESPONSE_PLAN_MODE="${SRE_RESPONSE_PLAN_MODE:-$(state_get sreAgentMode 2>/dev/null | tr '[:upper:]' '[:lower:]')}"
+RESPONSE_PLAN_MODE="${RESPONSE_PLAN_MODE:-review}"
+case "${RESPONSE_PLAN_MODE}" in
+  review|autonomous|readonly) ;;
+  *) die "SRE_RESPONSE_PLAN_MODE must be review, autonomous or readonly (got '${RESPONSE_PLAN_MODE}')" ;;
+esac
 RESPONSE_PLAN_ID="servicenow-lab-response-plan"
 AGENT_API_VERSION="${SRE_AGENT_API_VERSION:-2026-01-01}"
 

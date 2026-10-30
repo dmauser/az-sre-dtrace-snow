@@ -672,6 +672,19 @@ test('the Dynatrace MCP tools are exposed to the agent, not only connected', () 
   assert.match(read('scripts/validate.sh'), /toolsVisibleToMetaAgent \| length/);
 });
 
+test('--agent-mode Autonomous remediates end to end: plan follows the agent mode and Contributor is granted', () => {
+  const cfg = read('scripts/configure-sre-agent-integrations.sh');
+  assert.match(cfg, /RESPONSE_PLAN_MODE="\$\{SRE_RESPONSE_PLAN_MODE:-\$\(state_get sreAgentMode/,
+    'a hardcoded review plan would make an Autonomous agent still wait for approval');
+  assert.match(cfg, /review\|autonomous\|readonly\)/, "only the portal's three agentMode values are valid");
+  const deploy = read('scripts/deploy.sh');
+  assert.match(deploy, /"sreAgentMode": "\$\{SRE_AGENT_MODE\}"/, 'deploy records the mode the configure script reads');
+  assert.match(deploy, /"\$\{SRE_AGENT_MODE\}" == "Autonomous" \]\]; then\n[^\n]*\n\s+if ASSUME_YES=true "\$\{REPO_ROOT\}\/scripts\/enable-sre-remediation\.sh"/,
+    'an Autonomous agent without Contributor decides on a fix and then cannot apply it');
+  assert.ok(deploy.indexOf('enable-sre-remediation.sh" --agent-principal-id') < deploy.indexOf('scripts/configure-sre-agent-integrations.sh"; then'),
+    'grant write access before the response plan starts routing incidents to an autonomous agent');
+});
+
 test('scenario failures reach the container log, not only Application Insights', () => {
   // Dynatrace has no App Insights; OneAgent sees only what the processes print.
   const m8 = read('apps/magic8ball/backend/src/telemetry.ts');
