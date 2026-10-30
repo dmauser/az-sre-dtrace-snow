@@ -540,9 +540,12 @@ the agent's incident platform to ServiceNow (basic auth with the Terraform-creat
 priority 1–2 incidents. No portal step is needed. See [docs/SERVICENOW-SETUP.md](docs/SERVICENOW-SETUP.md).
 
 The repository is registered on the agent automatically (Builder → Code access). Because it is
-private, the agent also needs a credential: set `GITHUB_PAT` (fine-grained, this repo only,
-Contents + Metadata read-only) or authorize GitHub in the portal. The lab deploys completely
-without it and tells you precisely which step remains.
+private, the agent also needs a one-time GitHub authorization: in the portal open the agent →
+**Builder → Code access** → select `az-sre-dtrace-snow` → **Authorize**, and sign in to GitHub
+as the repository owner. Alternatively set `GITHUB_PAT` (fine-grained, this repo only, Contents +
+Metadata read-only) and re-run `./scripts/configure-sre-agent-integrations.sh`. Step by step:
+[docs/AZURE-SRE-AGENT-SETUP.md § 2](docs/AZURE-SRE-AGENT-SETUP.md#2-connect-the-private-github-repository).
+The lab deploys completely without it and tells you precisely which step remains.
 
 Permissions stay scoped to the demo resource group. The optional `enable-sre-remediation`
 workflow grants Contributor **at that resource group only** — never subscription-wide.
