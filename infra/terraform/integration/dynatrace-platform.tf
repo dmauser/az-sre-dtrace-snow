@@ -137,13 +137,13 @@ resource "dynatrace_automation_workflow" "servicenow" {
   count = local.platform_servicenow ? 1 : 0
 
   title       = local.workflow_name
-  description = "Opens a priority-2 ServiceNow incident (group ${var.assignment_group}) for every Davis problem titled ${local.title_prefix}. Managed by Terraform (SRE demo lab)."
+  description = "Opens a priority-2 ServiceNow incident (group ${var.assignment_group}) for every Davis problem titled ${local.title_prefix}, and resolves it when the problem closes. Managed by Terraform (SRE demo lab)."
   is_deployed = true
 
   tasks {
     task {
       name        = "create_incident"
-      description = "Create the ServiceNow incident unless one with the same correlation_id exists"
+      description = "Create the ServiceNow incident on open (once per correlation_id); resolve it on close"
       action      = "dynatrace.automations:run-javascript"
       input       = jsonencode({ script = local.workflow_script })
       position {
@@ -158,7 +158,8 @@ resource "dynatrace_automation_workflow" "servicenow" {
       active = true
       config {
         davis_problem {
-          trigger_on    = "open"
+          # open-and-close: the script creates the incident on open and resolves it on close.
+          trigger_on    = "open-and-close"
           custom_filter = "matchesValue(event.name, \"${local.title_prefix}*\")"
           categories {
             availability           = true

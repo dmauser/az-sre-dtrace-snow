@@ -637,18 +637,21 @@ NSG rule — so it works with Contributor alone:
    finds `sre-demo-deny-postgres` on `nsg-db-<suffix>`, and neutralises it.
 4. The controller shows PostgreSQL healthy again; the agent writes its findings and the action
    taken back to the incident.
-5. Reset the scenario in the controller (removes the rule), then resolve the incident.
+5. Once the probe recovers, Dynatrace closes the problem (~3 minutes) and the same workflow
+   **resolves the incident** (`Resolved by caller`, by the integration user).
+6. Reset the scenario in the controller; it deletes the shadowed rule.
 
 **Verified run (2026-10-30, no human input):** fault injected 22:35Z → Dynatrace problem 22:37Z →
 workflow creates the P2 incident 22:39Z → agent acknowledges 22:40Z and posts the root cause
 (rule, priority, activity-log caller) 22:41Z → mitigation 22:42Z → PostgreSQL healthy, validated
-from Dynatrace logs, 22:43Z. About 8 minutes from injection to recovery.
+from Dynatrace logs, 22:43Z → problem closed 22:45Z. About 8 minutes from injection to recovery.
 
 > **The agent does not delete.** Its autonomous write path refuses delete operations even with
 > Contributor, so it mitigates non-destructively: it moves the rule to priority **4096**, below the
 > Allow rules (200/210) and `Deny-Other-Vnet-Inbound` (4000), where it matches no traffic. It
 > leaves the incident **In Progress** and writes the exact `az network nsg rule delete` command
-> for a human to finish. Step 5 completes it.
+> for a human. The workflow resolves the incident when the problem closes (step 5); the reset
+> (step 6) deletes the rule.
 
 When finished, return to the safer default:
 
@@ -674,7 +677,8 @@ When finished, return to the safer default:
 | Agent says it has no Dynatrace tools | Connector missing or token rejected | Re-run `configure-sre-agent-integrations.sh`; check platform token scopes |
 | Autonomous agent finds the fix but `AuthorizationFailed` applying it | No Contributor on the resource group | `enable-sre-remediation.sh --agent-principal-id <id>`; `deploy.sh --agent-mode Autonomous` does this automatically |
 | Autonomous run: problem opens but no incident; workflow execution `403: The requested credential details cannot be accessed by the current user or entity` | The ServiceNow credential does not allow contextless requests (problem-triggered runs have no user) | Terraform sets `allow_contextless_requests = true`; re-run `deploy.sh` (or `terraform apply` in `infra/terraform/integration`) |
-| Agent moved the NSG rule to priority 4096 instead of deleting it | Expected: the agent does not run deletes autonomously | Reset the scenario (removes the rule), then resolve the incident |
+| Agent moved the NSG rule to priority 4096 instead of deleting it | Expected: the agent does not run deletes autonomously | Reset the scenario (removes the rule) |
+| Agent status **Completed** but incident stays **In progress** | The agent never resolves after a mitigation; the workflow resolves it when the Dynatrace problem closes | Check the problem has closed and the workflow trigger is `open-and-close` (re-run `deploy.sh`); `reset-lab.sh` resolves any leftovers |
 | Agent is Autonomous but still waits for approval | Response plan still `review` | Re-run `configure-sre-agent-integrations.sh` (it follows the agent mode) |
 
 Lab-level problems: **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**.
