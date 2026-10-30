@@ -431,7 +431,7 @@ remote MCP gateway, then creates an MCP connector on the agent through ARM:
 
 ```text
 PUT .../providers/Microsoft.App/agents/<agent>/connectors/dynatrace-mcp
-    dataConnectorType: Mcp · transport: http · authType: BearerToken
+    dataConnectorType: Mcp · transport: http · authType: BearerToken · partnerType: DynatraceMcp
     endpoint: https://<env-id>.apps.dynatrace.com/platform-reserved/mcp-gateway/v0.1/servers/dynatrace-mcp/mcp
 ```
 
@@ -439,6 +439,9 @@ Once connected, the agent can call tools such as `query-problems`, `get-problem-
 `execute-dql` and `get-events-for-kubernetes-cluster`. Token scopes:
 [DYNATRACE-SETUP.md](DYNATRACE-SETUP.md#3-platform-token--dt_platform_token-dt0s16).
 The API version can be overridden with `SRE_AGENT_CONNECTOR_API_VERSION`.
+
+This is the same body the portal sends from **Builder → Connectors → Dynatrace**; `partnerType`
+makes the portal list it as the Dynatrace connector rather than a generic MCP server.
 
 The script then confirms from the agent's side that the connector is **Connected** and lists
 its tools (`GET /api/v2/extendedAgent/connectors/dynatrace-mcp/tools`). ARM returns the
