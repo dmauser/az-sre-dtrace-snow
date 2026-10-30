@@ -22,6 +22,11 @@ output "dynatrace_operator_data_ingest_token" {
   sensitive   = true
 }
 
+output "scenario01_log_storage_rule_ids" {
+  description = "Keep rule first, drop rule second; reordered to the top by dt_log_storage_rules_first."
+  value       = [dynatrace_log_storage.scenario01_errors.id, dynatrace_log_storage.scenario01_rest.id]
+}
+
 output "aks_host_group" {
   value = local.aks_host_group
 }

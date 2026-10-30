@@ -84,17 +84,36 @@ else
     *) warn "Dynatrace MCP gateway check returned HTTP ${code:-none}; creating the connector anyway" ;;
   esac
 
-  jq -n --arg n "${DT_CONNECTOR_NAME}" --arg e "${MCP_ENDPOINT}" --arg t "${DT_PLATFORM_TOKEN}" '{
-    properties: {
-      name: $n,
-      dataConnectorType: "Mcp",
-      dataSource: $e,
-      identity: "system",
-      # partnerType makes the portal show it as the built-in Dynatrace connector
-      # (same body the portal sends from Builder > Connectors > Dynatrace).
-      extendedProperties: { type: "http", endpoint: $e, authType: "BearerToken", bearerToken: $t, partnerType: "DynatraceMcp" }
-    }
-  }' > "${body}"
+  # Connecting an MCP server is not enough: its tools reach the agent's chat
+  # (and incident investigations) only when listed in toolsVisibleToMetaAgent,
+  # which is what the portal's "MCP Tools" picker saves. selectedTools is the
+  # same list without the "<connector>_" prefix.
+  dt_connector_body() {  # $1: JSON array of tool names to expose
+    jq -n --arg n "${DT_CONNECTOR_NAME}" --arg e "${MCP_ENDPOINT}" --arg t "${DT_PLATFORM_TOKEN}" --argjson tools "$1" '{
+      properties: {
+        name: $n,
+        dataConnectorType: "Mcp",
+        dataSource: $e,
+        identity: "system",
+        # partnerType makes the portal show it as the built-in Dynatrace connector
+        # (same body the portal sends from Builder > Connectors > Dynatrace).
+        extendedProperties: ({ type: "http", endpoint: $e, authType: "BearerToken", bearerToken: $t, partnerType: "DynatraceMcp" }
+          + (if ($tools | length) > 0 then
+               { toolsVisibleToMetaAgent: $tools,
+                 selectedTools: [ $tools[] | ltrimstr($n + "_") ] }
+             else {} end))
+      }
+    }' > "${body}"
+  }
+  dt_discovered_tools() {
+    sre_dp GET "/api/v2/extendedAgent/connectors/${DT_CONNECTOR_NAME}/tools" | _http_body \
+      | jq -c '[.tools[]?.name] | sort' 2>/dev/null || echo '[]'
+  }
+  # On a re-run keep the current selection through the PUT, so the agent never
+  # briefly loses its Dynatrace tools.
+  DT_TOOLS='[]'
+  [[ "${DP_READY}" == "true" ]] && DT_TOOLS="$(dt_discovered_tools)"
+  dt_connector_body "${DT_TOOLS}"
   CONNECTOR_URL="https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.App/agents/${AGENT_NAME}/connectors/${DT_CONNECTOR_NAME}?api-version=${CONNECTOR_API_VERSION}"
   if err="$(az rest --method put --url "${CONNECTOR_URL}" --body "@${body}" \
         --headers 'Content-Type=application/json' -o none 2>&1)"; then
@@ -113,6 +132,23 @@ else
       done
       if [[ "${dt_status}" == "Connected" && "${dt_tools:-0}" -gt 0 ]]; then
         ok "Agent is connected to the Dynatrace MCP server (${dt_tools} tools)"
+        found="$(dt_discovered_tools)"
+        if [[ "${found}" != "${DT_TOOLS}" ]]; then
+          dt_connector_body "${found}"
+          if az rest --method put --url "${CONNECTOR_URL}" --body "@${body}" \
+               --headers 'Content-Type=application/json' -o none 2>/dev/null; then
+            DT_TOOLS="${found}"
+          else
+            warn "Could not expose the Dynatrace tools to the agent; select them under Builder > Connectors > ${DT_CONNECTOR_NAME} > Edit > MCP Tools"
+          fi
+        fi
+        visible="$(az rest --method get --url "${CONNECTOR_URL}" \
+          --query 'length(properties.extendedProperties.toolsVisibleToMetaAgent)' -o tsv 2>/dev/null || echo 0)"
+        if [[ "${visible:-0}" -gt 0 ]]; then
+          ok "${visible} Dynatrace tools available to the agent in chat and investigations"
+        else
+          warn "No Dynatrace tools are exposed to the agent; select them under Builder > Connectors > ${DT_CONNECTOR_NAME} > Edit > MCP Tools"
+        fi
       else
         warn "The agent reports the Dynatrace connector as '${dt_status:-unknown}'; check it under Builder > Connectors"
       fi

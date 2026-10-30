@@ -139,6 +139,18 @@ class Telemetry {
 
   trackException(error: unknown, properties?: Record<string, string>): void {
     const err = error instanceof Error ? error : new Error(String(error));
+    // Mirror to stderr so the Dynatrace OneAgent log module sees the same
+    // failure the Application Insights exception carries.
+    process.stderr.write(
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        service: 'magic8ball',
+        message: err.message.slice(0, 4000),
+        errorType: err.name,
+        ...properties,
+      })}\n`,
+    );
     this.push('Exception', 'ExceptionData', {
       exceptions: [
         {

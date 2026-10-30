@@ -337,7 +337,11 @@ if [[ -n "${AGENT_NAME}" && ( "$(state_get dynatraceEnabled false)" == "true" ||
       nt="$(jq -r '.tools | length' 2>/dev/null <<<"${body}" || echo 0)"
       report "Agent connected to Dynatrace MCP" "$([[ "${st}" == "Connected" && "${nt:-0}" -gt 0 ]] && echo true || echo false)" \
         "${st}, ${nt:-0} tools; fix with ./scripts/configure-sre-agent-integrations.sh"
-      pt="$(sre_dp GET /api/v2/extendedAgent/connectors/dynatrace-mcp | _http_body | jq -r '.properties.extendedProperties.partnerType // "none"' 2>/dev/null || echo none)"
+      conn="$(sre_dp GET /api/v2/extendedAgent/connectors/dynatrace-mcp | _http_body)"
+      vt="$(jq -r '.properties.extendedProperties.toolsVisibleToMetaAgent | length' 2>/dev/null <<<"${conn}" || echo 0)"
+      report "Dynatrace tools exposed to the agent (chat and investigations)" "$([[ "${vt:-0}" -gt 0 ]] && echo true || echo false)" \
+        "${vt:-0} tools selected; without them the agent cannot query Dynatrace. Fix with ./scripts/configure-sre-agent-integrations.sh"
+      pt="$(jq -r '.properties.extendedProperties.partnerType // "none"' 2>/dev/null <<<"${conn}" || echo none)"
       report "Dynatrace connector is the built-in Dynatrace type" "$([[ "${pt}" == "DynatraceMcp" ]] && echo true || echo false)" \
         "partnerType ${pt}; fix with ./scripts/configure-sre-agent-integrations.sh"
     fi

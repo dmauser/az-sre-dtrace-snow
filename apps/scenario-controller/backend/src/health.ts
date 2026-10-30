@@ -211,6 +211,88 @@ export async function labStatus(): Promise<LabStatus> {
   };
 }
 
+/**
+ * One log line per unhealthy signal per probe tick. Metrics say *that* a
+ * signal is bad; these lines carry *why* (the probe error, the TLS reason, the
+ * connection census), and they are what the Dynatrace OneAgent log module
+ * ingests from the controller's container output for scenarios 01, 02, 04, 05
+ * and 06.
+ */
+function logDegradedSignals(
+  s: {
+    disk: Awaited<ReturnType<typeof diskUsage>> | undefined;
+    pg: Awaited<ReturnType<typeof getConnectionStats>>;
+    tcp: Awaited<ReturnType<typeof tcpProbe>>;
+    magic8Http: Awaited<ReturnType<typeof httpProbe>>;
+    magic8Tls: Awaited<ReturnType<typeof tlsProbe>>;
+    runner: Awaited<ReturnType<typeof runnerStatus>>;
+  },
+  activeScenarioId: string | undefined,
+): void {
+  const base = { check: 'synthetic-probe', 'scenario.id': activeScenarioId ?? 'none' };
+  if (s.disk && s.disk.percentUsed >= 85) {
+    log.warn('demo disk nearly full', {
+      ...base,
+      signal: 'disk',
+      mount: s.disk.mountPath,
+      percentUsed: s.disk.percentUsed,
+      freeGb: Math.round((s.disk.freeBytes / 1024 ** 3) * 100) / 100,
+    });
+  }
+  if (!s.tcp.reachable) {
+    log.error('postgres TCP 5432 unreachable', {
+      ...base,
+      signal: 'postgres.tcp',
+      target: `${config.postgres.host}:${config.postgres.port}`,
+      error: s.tcp.error ?? 'no route',
+    });
+  } else if (!s.pg.reachable) {
+    log.error('postgres query failed', {
+      ...base,
+      signal: 'postgres.query',
+      target: config.postgres.host,
+      error: s.pg.error ?? 'unknown',
+    });
+  } else if (s.pg.percentUsed >= 80) {
+    log.warn('postgres connection pool near exhaustion', {
+      ...base,
+      signal: 'postgres.connections',
+      activeConnections: s.pg.activeConnections,
+      maxConnections: s.pg.maxConnections,
+      percentUsed: s.pg.percentUsed,
+      scenarioConnections: s.pg.scenarioConnections,
+      offendingApplication: s.pg.scenarioConnections > 0 ? 'sre-demo-scenario-04' : null,
+    });
+  }
+  if (s.runner.reachable && s.runner.pendingPods > 0) {
+    log.warn('AKS pods pending, cluster capacity exhausted', {
+      ...base,
+      signal: 'aks.pending',
+      pendingPods: s.runner.pendingPods,
+      nodeCount: s.runner.nodeCount,
+    });
+  }
+  if (!s.magic8Http.ok) {
+    log.error('magic8ball HTTP health check failed', {
+      ...base,
+      signal: 'magic8ball.http',
+      url: `${config.magic8ball.httpUrl}/healthz`,
+      statusCode: s.magic8Http.statusCode ?? null,
+      error: s.magic8Http.error ?? null,
+    });
+  }
+  if (!s.magic8Tls.valid) {
+    log.error('magic8ball TLS certificate validation failed', {
+      ...base,
+      signal: 'magic8ball.tls',
+      url: config.magic8ball.httpsUrl,
+      expired: s.magic8Tls.expired,
+      notAfter: s.magic8Tls.notAfter ?? null,
+      reason: s.magic8Tls.reason ?? 'TLS validation failed',
+    });
+  }
+}
+
 /** Publishes the sre_demo_* metric family on a short, demo-friendly cadence. */
 export function startProbeLoop(): NodeJS.Timeout {
   const tick = async () => {
@@ -263,6 +345,7 @@ export function startProbeLoop(): NodeJS.Timeout {
       if (runner.nodeCount > 0) telemetry.trackMetric(METRICS.aksNodeCount, runner.nodeCount);
 
       const active = activeScenarios();
+      logDegradedSignals({ disk, pg, tcp, magic8Http, magic8Tls, runner }, active[0]?.id);
       telemetry.trackMetric(METRICS.scenarioActive, active.length > 0 ? 1 : 0, {
         'scenario.id': active[0]?.id ?? 'none',
       });

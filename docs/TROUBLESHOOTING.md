@@ -346,6 +346,25 @@ A Bicep redeploy resets the agent's incident platform, so `deploy.sh` always re-
 The connector's `endpoint` shows as `null` in ARM and in the portal JSON view. That is
 redaction; the connector's `/tools` route is the real check.
 
+### Agent says Dynatrace is connected but cannot query it
+
+In chat the agent reports that `dynatrace-mcp` is connected, but its tool search for
+`execute-dql` or `query-problems` returns nothing, and it falls back to Log Analytics. The
+connector's tools are not selected for the agent: `validate.sh` fails **Dynatrace tools exposed
+to the agent**. Re-run `./scripts/configure-sre-agent-integrations.sh` (it writes
+`toolsVisibleToMetaAgent`), or in the portal go to **Builder → Connectors → dynatrace-mcp → Edit
+→ MCP Tools → Select all → Save**. Start a new chat thread afterwards; an open thread keeps its
+tool list.
+
+### Agent finds no scenario logs in Dynatrace
+
+`fetch logs | filter contains(content, "retry_storm=true")` returns nothing. Check that
+**Settings → Log Monitoring → Custom log sources** has `[sre-demo-<suffix>] scenario 01
+application logs`, and that the two `[sre-demo-<suffix>]` rules are at the **top** of **Log
+storage configuration**. Below the built-in rules they never match. A deploy restores both. If
+the scenario was already active before the source existed, its writer is paused at the target,
+so reset and re-activate it. OneAgent needs a few minutes to pick up a new source.
+
 ### Agent cannot read the GitHub repository
 
 `configure-sre-agent-integrations.sh` prints `Agent cannot read ... yet: GitHub API returned
