@@ -538,7 +538,7 @@ loop logs every degraded signal with its cause every 20 seconds, tagged `scenari
 | Scenario | Log evidence in Dynatrace | Find it with |
 | --- | --- | --- |
 | 01 Disk | scenario log files + controller `signal=disk` | `contains(content, "retry_storm=true")` |
-| 02 AKS capacity | controller `signal=aks.pending`; Kubernetes events | `contains(content, "aks.pending")` |
+| 02 AKS capacity | controller `signal=aks.pending`; Kubernetes `Insufficient cpu` scheduling events (in `fetch events`, not logs) | `contains(content, "aks.pending")` |
 | 03 Bad deployment | magic8ball pod errors `oracle backend returned null` | `k8s.container.name == "magic8ball" and loglevel == "ERROR"` |
 | 04 Postgres connections | controller `signal=postgres.connections` naming `sre-demo-scenario-04`; PostgreSQL server log | `contains(content, "postgres.connections")` |
 | 05 NSG | controller `signal=postgres.tcp` (TCP 5432 unreachable) | `contains(content, "postgres.tcp")` |
