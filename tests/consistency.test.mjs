@@ -655,6 +655,15 @@ test('Git Bash never rewrites Azure resource IDs into Windows paths', () => {
   assert.match(read('scripts/gen-certs.sh'), /MSYS2_ARG_CONV_EXCL="\$\{MSYS2_ARG_CONV_EXCL:\+/);
 });
 
+test('the Dynatrace connector is created as the portal built-in Dynatrace connector', () => {
+  const cfg = read('scripts/configure-sre-agent-integrations.sh');
+  assert.match(cfg, /dataConnectorType: "Mcp"/);
+  assert.match(cfg, /partnerType: "DynatraceMcp"/, 'without partnerType the portal lists it as a generic MCP server');
+  assert.match(cfg, /platform-reserved\/mcp-gateway\/v0\.1\/servers\/dynatrace-mcp\/mcp/);
+  assert.match(read('scripts/deploy.sh'), /scripts\/configure-sre-agent-integrations\.sh/);
+  assert.match(read('scripts/validate.sh'), /partnerType[\s\S]*DynatraceMcp/);
+});
+
 test('the SRE agent is wired to ServiceNow the way the portal does it', () => {
   const cfg = read('scripts/configure-sre-agent-integrations.sh');
   // Basic auth: connectionKey is a JSON document, not the bare password.

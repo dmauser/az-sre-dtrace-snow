@@ -95,6 +95,11 @@ resource agent 'Microsoft.App/agents@2026-01-01' = {
     // agent" — silently blocking that portal feature until this is set.
     knowledgeGraphConfiguration: {
       identity: agentIdentity.id
+      // Onboards the lab resource group as the agent's managed Azure resources
+      // (portal: Builder > Azure resources). Same scope as the read roles in deploy.sh 13b.
+      managedResources: [
+        resourceGroup().id
+      ]
     }
     logConfiguration: {
       applicationInsightsConfiguration: {

@@ -18,7 +18,9 @@ function readIfPresent(path: string): string | undefined {
   return existsSync(path) ? readFileSync(path, 'utf8') : undefined;
 }
 
-const token = readIfPresent(`${SA_DIR}/token`)?.trim();
+// Re-read per request: the kubelet rotates the projected token, and a value
+// cached at startup starts getting 401s once the API server stops accepting it.
+const readToken = (): string | undefined => readIfPresent(`${SA_DIR}/token`)?.trim();
 const caCert = readIfPresent(`${SA_DIR}/ca.crt`);
 
 export const namespace =
@@ -29,6 +31,7 @@ export const namespace =
 const agent = new Agent({ ca: caCert ? [caCert] : undefined, keepAlive: true });
 
 function api<T>(method: string, path: string, body?: unknown, contentType = 'application/json'): Promise<T> {
+  const token = readToken();
   const payload = body === undefined ? undefined : JSON.stringify(body);
   return new Promise<T>((resolve, reject) => {
     const req = httpsRequest(

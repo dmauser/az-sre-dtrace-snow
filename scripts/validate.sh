@@ -337,6 +337,9 @@ if [[ -n "${AGENT_NAME}" && ( "$(state_get dynatraceEnabled false)" == "true" ||
       nt="$(jq -r '.tools | length' 2>/dev/null <<<"${body}" || echo 0)"
       report "Agent connected to Dynatrace MCP" "$([[ "${st}" == "Connected" && "${nt:-0}" -gt 0 ]] && echo true || echo false)" \
         "${st}, ${nt:-0} tools; fix with ./scripts/configure-sre-agent-integrations.sh"
+      pt="$(sre_dp GET /api/v2/extendedAgent/connectors/dynatrace-mcp | _http_body | jq -r '.properties.extendedProperties.partnerType // "none"' 2>/dev/null || echo none)"
+      report "Dynatrace connector is the built-in Dynatrace type" "$([[ "${pt}" == "DynatraceMcp" ]] && echo true || echo false)" \
+        "partnerType ${pt}; fix with ./scripts/configure-sre-agent-integrations.sh"
     fi
     if [[ "$(state_get servicenowEnabled false)" == "true" ]]; then
       body="$(sre_dp GET /api/v2/incidentManagement/checkConnectivityDetailed | _http_body)"
