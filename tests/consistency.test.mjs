@@ -672,6 +672,19 @@ test('the Dynatrace MCP tools are exposed to the agent, not only connected', () 
   assert.match(read('scripts/validate.sh'), /toolsVisibleToMetaAgent \| length/);
 });
 
+test('app metric sinks post to /api/v2/metrics/ingest, never /api/api/v2 (which 404s and drops every sre_demo.* metric)', () => {
+  const deploy = read('scripts/deploy.sh');
+  assert.match(deploy, /^DT_API_URL=\$\{DT_CLASSIC_URL\}$/m, 'controller DT_API_URL must be the environment root');
+  assert.match(deploy, /--from-literal=dynatraceApiUrl="\$\{DT_CLASSIC_URL\}"/, 'magic8ball dynatraceApiUrl must be the environment root');
+  for (const app of ['scenario-controller', 'magic8ball']) {
+    assert.match(read(`apps/${app}/backend/src/dynatrace.ts`), /\.replace\(\/\\\/api\$\/, ''\)\}\/api\/v2\/metrics\/ingest/,
+      `${app} sink must tolerate a trailing /api`);
+  }
+  assert.match(read('scripts/validate.sh'), /\.telemetry\.dynatraceIngest/,
+    'validate.sh must check the ingest result without needing a Dynatrace read token');
+  assert.match(read('apps/scenario-controller/backend/src/health.ts'), /dynatraceIngest: dynatrace\.lastStatus/);
+});
+
 test('--agent-mode Autonomous remediates end to end: plan follows the agent mode and Contributor is granted', () => {
   const cfg = read('scripts/configure-sre-agent-integrations.sh');
   assert.match(cfg, /RESPONSE_PLAN_MODE="\$\{SRE_RESPONSE_PLAN_MODE:-\$\(state_get sreAgentMode/,

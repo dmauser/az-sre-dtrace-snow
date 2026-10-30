@@ -57,7 +57,9 @@ class DynatraceSink {
 
   configure(config: DynatraceSinkConfig): void {
     if (!config.apiUrl || !config.token) return;
-    this.endpoint = `${config.apiUrl.replace(/\/+$/, '')}/api/v2/metrics/ingest`;
+    // Accept the environment root with or without the /api suffix OneAgent uses;
+    // doubling it (/api/api/v2/...) returns 404 and silently drops every metric.
+    this.endpoint = `${config.apiUrl.replace(/\/+$/, '').replace(/\/api$/, '')}/api/v2/metrics/ingest`;
     this.token = config.token;
     this.dimensions = config.dimensions ?? {};
     if (!this.timer) {

@@ -1034,7 +1034,7 @@ kubectl -n sre-demo create secret generic magic8ball-db \
 
 kubectl -n sre-demo create secret generic magic8ball-telemetry \
   --from-literal=connectionString="${APPI_CONNECTION_STRING}" \
-  --from-literal=dynatraceApiUrl="${DT_CLASSIC_URL:+${DT_CLASSIC_URL}/api}" \
+  --from-literal=dynatraceApiUrl="${DT_CLASSIC_URL}" \
   --from-literal=dynatraceIngestToken="${DT_INGEST_TOKEN}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
@@ -1200,7 +1200,7 @@ APP_VERSION=0.1.0
 IMAGE_TAG=${IMAGE_TAG}
 GIT_COMMIT=${GIT_COMMIT}
 BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
-DT_API_URL=${DT_CLASSIC_URL:+${DT_CLASSIC_URL}/api}
+DT_API_URL=${DT_CLASSIC_URL}
 DT_INGEST_TOKEN=${DT_INGEST_TOKEN}
 DT_UI_URL=${DT_APPS_URL}
 SNOW_INSTANCE_URL=$([[ "${SERVICENOW_ENABLED}" == "true" ]] && echo "${SNOW_INSTANCE_URL%/}")
