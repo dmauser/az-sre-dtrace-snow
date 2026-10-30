@@ -539,7 +539,9 @@ the agent's incident platform to ServiceNow (basic auth with the Terraform-creat
 `sre_demo_integration` user, assignment group `SRE Demo Lab`) with a response plan for
 priority 1–2 incidents. No portal step is needed. See [docs/SERVICENOW-SETUP.md](docs/SERVICENOW-SETUP.md).
 
-The GitHub connector consent is interactive in most tenants. The lab deploys completely
+The repository is registered on the agent automatically (Builder → Code access). Because it is
+private, the agent also needs a credential: set `GITHUB_PAT` (fine-grained, this repo only,
+Contents + Metadata read-only) or authorize GitHub in the portal. The lab deploys completely
 without it and tells you precisely which step remains.
 
 Permissions stay scoped to the demo resource group. The optional `enable-sre-remediation`
