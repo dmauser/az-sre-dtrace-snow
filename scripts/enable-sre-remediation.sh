@@ -7,9 +7,9 @@
 # scaling the AKS node pool (02), removing the NSG rule (05), rolling back a
 # deployment (03), restarting workloads (06).
 #
-# It is a separate script, and never part of deploy.sh, because granting write
-# access to an automated agent should be a deliberate decision rather than a
-# side effect of setting up a demo.
+# deploy.sh calls it only when --agent-mode Autonomous was passed, because
+# granting write access to an automated agent should be a deliberate decision
+# rather than a side effect of setting up a demo.
 #
 # Scope is the demo resource group. Subscription-scope Contributor is never
 # granted, and this script will refuse to do so.
@@ -95,9 +95,9 @@ cat <<SUMMARY
 
   It does NOT grant access to anything else in the subscription.
 
-  Azure SRE Agent mitigation actions remain approval-controlled: the agent
-  proposes a change and waits for a human to approve it. This grant makes the
-  action possible, not automatic.
+  In Review mode the agent proposes a change and waits for a human to approve
+  it. In Autonomous mode (deploy.sh --agent-mode Autonomous) it applies the
+  change itself, so this grant is what lets it remediate end to end.
 
 SUMMARY
 

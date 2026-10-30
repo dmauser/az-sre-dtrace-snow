@@ -97,6 +97,16 @@ if [[ -n "${CONTROLLER_HEALTH}" ]]; then
 
   SCENARIO_COUNT="$(curl -fsS --max-time 20 "${CONTROLLER_URL}/api/scenarios" 2>/dev/null | jq -r '.scenarios | length // 0')"
   report "All six scenario APIs available" "$([[ "${SCENARIO_COUNT}" == "6" ]] && echo true || echo false)" "${SCENARIO_COUNT} registered"
+
+  # Needs no Dynatrace token: the controller reports its own last ingest result.
+  # Without this, a wrong DT_API_URL (e.g. /api/api/v2 -> 404) drops every
+  # sre_demo.* metric and no Dynatrace metric event can ever open a problem.
+  if [[ "$(state_get dynatraceEnabled false)" == "true" ]]; then
+    DT_INGEST="$(echo "${LAB_STATUS}" | jq -c '.telemetry.dynatraceIngest // null')"
+    report "Controller metrics accepted by Dynatrace" \
+      "$(echo "${DT_INGEST}" | jq -r '.ok // false')" \
+      "$(echo "${DT_INGEST}" | jq -r 'if . == null then "no ingest attempt reported (sink not configured or not flushed yet)" else "HTTP \(.detail) at \(.at)" end')"
+  fi
 else
   skip "Component health checks (controller unreachable)"
 fi

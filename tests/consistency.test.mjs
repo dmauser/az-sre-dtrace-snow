@@ -495,6 +495,10 @@ test('the platform workflow only routes lab problems and raises the same inciden
   assert.ok(impact + urgency <= 3, `impact ${impact} + urgency ${urgency} is below priority 2; the quickstart plan ignores it`);
   assert.match(js, /startsWith\(CONFIG\.titlePrefix/, 'the deploy smoke test relies on non-lab titles being skipped');
   assert.match(js, /credentialVaultClient\.getCredentialsDetails/, 'credentials must come from the vault, not the script');
+  // Problem-triggered runs have no user context; without this the credential read returns 403
+  // (seen live). Manual runs and the deploy smoke test never notice.
+  const cred = platform.match(/resource "dynatrace_credentials" "servicenow" \{[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(cred, /allow_contextless_requests\s*=\s*true/, 'the ServiceNow credential must allow contextless (event-triggered) requests');
   assert.ok(!/password\s*[:=]\s*['"]/.test(js), 'no literal password in the workflow script');
   // ex.event() rejects with 403 on manual runs; un-awaited, that escapes the try as an
   // unhandled rejection and fails the task before the title check (seen live).
@@ -670,6 +674,32 @@ test('the Dynatrace MCP tools are exposed to the agent, not only connected', () 
   assert.match(cfg, /selectedTools: \[ \$tools\[\] \| ltrimstr\(\$n \+ "_"\) \]/);
   assert.match(cfg, /dt_connector_body "\$\{found\}"/, 'tools are discovered after connect and written back to the connector');
   assert.match(read('scripts/validate.sh'), /toolsVisibleToMetaAgent \| length/);
+});
+
+test('app metric sinks post to /api/v2/metrics/ingest, never /api/api/v2 (which 404s and drops every sre_demo.* metric)', () => {
+  const deploy = read('scripts/deploy.sh');
+  assert.match(deploy, /^DT_API_URL=\$\{DT_CLASSIC_URL\}$/m, 'controller DT_API_URL must be the environment root');
+  assert.match(deploy, /--from-literal=dynatraceApiUrl="\$\{DT_CLASSIC_URL\}"/, 'magic8ball dynatraceApiUrl must be the environment root');
+  for (const app of ['scenario-controller', 'magic8ball']) {
+    assert.match(read(`apps/${app}/backend/src/dynatrace.ts`), /\.replace\(\/\\\/api\$\/, ''\)\}\/api\/v2\/metrics\/ingest/,
+      `${app} sink must tolerate a trailing /api`);
+  }
+  assert.match(read('scripts/validate.sh'), /\.telemetry\.dynatraceIngest/,
+    'validate.sh must check the ingest result without needing a Dynatrace read token');
+  assert.match(read('apps/scenario-controller/backend/src/health.ts'), /dynatraceIngest: dynatrace\.lastStatus/);
+});
+
+test('--agent-mode Autonomous remediates end to end: plan follows the agent mode and Contributor is granted', () => {
+  const cfg = read('scripts/configure-sre-agent-integrations.sh');
+  assert.match(cfg, /RESPONSE_PLAN_MODE="\$\{SRE_RESPONSE_PLAN_MODE:-\$\(state_get sreAgentMode/,
+    'a hardcoded review plan would make an Autonomous agent still wait for approval');
+  assert.match(cfg, /review\|autonomous\|readonly\)/, "only the portal's three agentMode values are valid");
+  const deploy = read('scripts/deploy.sh');
+  assert.match(deploy, /"sreAgentMode": "\$\{SRE_AGENT_MODE\}"/, 'deploy records the mode the configure script reads');
+  assert.match(deploy, /"\$\{SRE_AGENT_MODE\}" == "Autonomous" \]\]; then\n[^\n]*\n\s+if ASSUME_YES=true "\$\{REPO_ROOT\}\/scripts\/enable-sre-remediation\.sh"/,
+    'an Autonomous agent without Contributor decides on a fix and then cannot apply it');
+  assert.ok(deploy.indexOf('enable-sre-remediation.sh" --agent-principal-id') < deploy.indexOf('scripts/configure-sre-agent-integrations.sh"; then'),
+    'grant write access before the response plan starts routing incidents to an autonomous agent');
 });
 
 test('scenario failures reach the container log, not only Application Insights', () => {

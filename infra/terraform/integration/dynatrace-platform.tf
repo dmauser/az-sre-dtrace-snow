@@ -96,6 +96,10 @@ resource "dynatrace_davis_anomaly_detectors" "lab" {
 }
 
 # The workflow reads these at run time; only the token owner can use them.
+# allow_contextless_requests is required: a problem-triggered (Event) run has no
+# user context, so without it getCredentialsDetails returns 403 "cannot be
+# accessed by the current user or entity". Manual runs (and the deploy smoke
+# test) carry a user context, so they never expose the problem.
 resource "dynatrace_credentials" "servicenow" {
   count = local.platform_servicenow ? 1 : 0
 
@@ -105,6 +109,8 @@ resource "dynatrace_credentials" "servicenow" {
   password          = random_password.integration.result
   scopes            = ["APP_ENGINE"]
   owner_access_only = true
+
+  allow_contextless_requests = true
 
   depends_on = [
     restapi_object.integration_user_role,

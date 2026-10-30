@@ -13,6 +13,7 @@ import { diskUsage, httpProbe, tcpProbe, tlsProbe } from './probes.js';
 import { runnerStatus } from './runner.js';
 import { getNodePool, azureConfigured } from './azure.js';
 import { telemetry, METRICS } from './telemetry.js';
+import { dynatrace } from './dynatrace.js';
 import { activeScenarios } from './scenarios/index.js';
 
 export type HealthState = 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY' | 'UNKNOWN';
@@ -40,6 +41,8 @@ export interface LabStatus {
   telemetry: {
     applicationInsightsConfigured: boolean;
     bufferedEvents: number;
+    /** Last Dynatrace metrics ingest result; null until the first flush, absent if the sink is off. */
+    dynatraceIngest?: { ok: boolean; at: string; detail: string } | null;
   };
   environment: {
     suffix: string;
@@ -197,6 +200,7 @@ export async function labStatus(): Promise<LabStatus> {
     telemetry: {
       applicationInsightsConfigured: telemetry.enabled,
       bufferedEvents: pendingEventCount(),
+      ...(dynatrace.enabled ? { dynatraceIngest: dynatrace.lastStatus ?? null } : {}),
     },
     environment: {
       suffix: config.labSuffix,
