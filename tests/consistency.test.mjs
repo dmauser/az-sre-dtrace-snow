@@ -664,6 +664,28 @@ test('the Dynatrace connector is created as the portal built-in Dynatrace connec
   assert.match(read('scripts/validate.sh'), /partnerType[\s\S]*DynatraceMcp/);
 });
 
+test('the Dynatrace MCP tools are exposed to the agent, not only connected', () => {
+  const cfg = read('scripts/configure-sre-agent-integrations.sh');
+  assert.match(cfg, /toolsVisibleToMetaAgent: \$tools/, 'a connected MCP server without selected tools is invisible to the agent');
+  assert.match(cfg, /selectedTools: \[ \$tools\[\] \| ltrimstr\(\$n \+ "_"\) \]/);
+  assert.match(cfg, /dt_connector_body "\$\{found\}"/, 'tools are discovered after connect and written back to the connector');
+  assert.match(read('scripts/validate.sh'), /toolsVisibleToMetaAgent \| length/);
+});
+
+test('scenario failures reach the container log, not only Application Insights', () => {
+  // Dynatrace has no App Insights; OneAgent sees only what the processes print.
+  const m8 = read('apps/magic8ball/backend/src/telemetry.ts');
+  const exc = m8.slice(m8.indexOf('trackException('));
+  assert.match(exc.slice(0, exc.indexOf('this.push(')), /process\.stderr\.write\(/,
+    'magic8ball exceptions (scenario 03) must be mirrored to stderr');
+  const health = read('apps/scenario-controller/backend/src/health.ts');
+  const loop = health.slice(health.indexOf('export function startProbeLoop'));
+  assert.match(loop, /logDegradedSignals\(/, 'the probe loop must log degraded signals');
+  for (const signal of ['disk', 'postgres.tcp', 'postgres.query', 'postgres.connections', 'aks.pending', 'magic8ball.http', 'magic8ball.tls']) {
+    assert.ok(health.includes(`signal: '${signal}'`), `degraded signal ${signal} must be logged`);
+  }
+});
+
 test('scenario-runner re-reads its rotating service-account token on every request', () => {
   const src = read('services/scenario-runner/src/k8s.ts');
   // Projected tokens rotate about hourly; a token cached at startup 401s after that.

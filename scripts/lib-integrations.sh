@@ -343,6 +343,7 @@ integrations_apply() {
   SNOW_INTEGRATION_PASSWORD="$(_tf output -raw servicenow_integration_password)"
   SNOW_GROUP_SYS_ID="$(_tf output -raw servicenow_assignment_group_sys_id)"
   local rules routing
+  dt_log_storage_rules_first "$(_tf output -json scenario01_log_storage_rule_ids)"
   rules="$(_tf output -json alert_rule_ids | jq 'length')"
   if [[ "${DT_PLATFORM_MODE}" == "true" ]]; then
     ok "Dynatrace: 4 scoped tokens, ${rules} Davis anomaly detectors titled ${DT_TITLE_PREFIX}"
@@ -357,6 +358,30 @@ integrations_apply() {
       dt_workflow_smoke_test "$(_tf output -raw servicenow_workflow_id)" || true
     fi
   fi
+}
+
+# Log storage rules are first-match-wins, and the built-in "Ingest logs from
+# custom log sources" rule sits near the top. Terraform can only append, so
+# move the scenario 01 keep/drop pair to the top; otherwise every one of the
+# ~2 GB of log lines a run writes is stored. In the Settings API an empty
+# insertAfter means "first position".
+dt_log_storage_rules_first() {  # $1: JSON array [keepRuleId, dropRuleId]
+  local ids="$1" after="" id resp code tmp
+  tmp="$(mktemp)"
+  for id in $(jq -r '.[]' <<<"${ids}" | tr -d '\r'); do
+    resp="$(dt_api GET "/api/v2/settings/objects/${id}" 2>/dev/null || true)"
+    if [[ "$(_http_code <<<"${resp}")" != "200" ]]; then
+      rm -f "${tmp}"; warn "Could not read Dynatrace log storage rule ${id}"; return 1
+    fi
+    _http_body <<<"${resp}" | jq -c --arg a "${after}" '{value: .value, insertAfter: $a}' > "${tmp}"
+    code="$(dt_api PUT "/api/v2/settings/objects/${id}" --data-binary "@${tmp}" 2>/dev/null | _http_code || true)"
+    if [[ "${code}" != "200" ]]; then
+      rm -f "${tmp}"; warn "Could not move Dynatrace log storage rule ${id} to the top (HTTP ${code:-none})"; return 1
+    fi
+    after="${id}"
+  done
+  rm -f "${tmp}"
+  ok "Dynatrace: scenario 01 logs ingested from /var/sre-demo/logs (retry-storm errors only)"
 }
 
 integrations_destroy() {

@@ -500,6 +500,50 @@ The script then confirms from the agent's side that the connector is **Connected
 its tools (`GET /api/v2/extendedAgent/connectors/dynatrace-mcp/tools`). ARM returns the
 connector's endpoint as `null`; that is redaction, not a missing value.
 
+**Exposing the tools to the agent.** A connected MCP server is not enough: its tools reach chat
+and incident investigations only when they are selected for the agent
+([MCP connector, step 2](https://learn.microsoft.com/azure/sre-agent/mcp-connector#step-2-select-tools-for-your-agent)).
+The portal pre-selects them when you add a connector by hand; a connector created through ARM has
+none, and the agent then reports that `dynatrace-mcp` is connected but its tool search finds
+nothing. The script writes all discovered tools back to the connector, as the portal's
+**Edit → MCP Tools** picker does:
+
+```text
+extendedProperties.toolsVisibleToMetaAgent: ["dynatrace-mcp_execute-dql", "dynatrace-mcp_query-problems", ...]
+extendedProperties.selectedTools:           ["execute-dql", "query-problems", ...]
+```
+
+`validate.sh` checks that list is not empty. To fix it by hand: **Builder → Connectors →
+dynatrace-mcp → Edit → MCP Tools → Select all → Save** (the agent has an 80-tool limit; the
+Dynatrace server has 21).
+
+**Scenario logs in Dynatrace.** OneAgent only discovers system logs on its own, so Terraform
+(`infra/terraform/integration/dynatrace-logs.tf`) adds a custom log source for the scenario 01
+log files in `/var/sre-demo/logs`. A run writes about 2 GB, so storage rules keep only the
+`retry_storm=true` error lines and drop the rest; `deploy.sh` moves both rules above the built-in
+ones, because storage rules are first-match-wins. The agent finds them with:
+
+```text
+fetch logs | filter contains(log.source, "sre-demo-scenario-01") or contains(content, "retry_storm=true")
+```
+
+Storage rules are pulled by OneAgent every few minutes; lines read before then follow the
+built-in rules, so the first run after a fresh deploy can still store INFO/WARN lines.
+
+The other scenarios need no extra log source: their evidence is already in container and
+database logs that OneAgent ingests by default. Both apps print one JSON line per failure to
+stdout/stderr (Application Insights alone is invisible to Dynatrace), and the controller's probe
+loop logs every degraded signal with its cause every 20 seconds, tagged `scenario.id`.
+
+| Scenario | Log evidence in Dynatrace | Find it with |
+| --- | --- | --- |
+| 01 Disk | scenario log files + controller `signal=disk` | `contains(content, "retry_storm=true")` |
+| 02 AKS capacity | controller `signal=aks.pending`; Kubernetes events | `contains(content, "aks.pending")` |
+| 03 Bad deployment | magic8ball pod errors `oracle backend returned null` | `k8s.container.name == "magic8ball" and loglevel == "ERROR"` |
+| 04 Postgres connections | controller `signal=postgres.connections` naming `sre-demo-scenario-04`; PostgreSQL server log | `contains(content, "postgres.connections")` |
+| 05 NSG | controller `signal=postgres.tcp` (TCP 5432 unreachable) | `contains(content, "postgres.tcp")` |
+| 06 Certificate | controller `signal=magic8ball.tls` with the expiry reason | `contains(content, "magic8ball.tls")` |
+
 **ServiceNow (automated).** The script sets the agent's incident platform to ServiceNow with
 the `sre_demo_integration` user, waits for the agent to connect, scopes indexing to the
 **SRE Demo Lab** group and creates the `servicenow-lab-response-plan` response plan
