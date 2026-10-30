@@ -664,6 +664,24 @@ test('the Dynatrace connector is created as the portal built-in Dynatrace connec
   assert.match(read('scripts/validate.sh'), /partnerType[\s\S]*DynatraceMcp/);
 });
 
+test('scenario-runner re-reads its rotating service-account token on every request', () => {
+  const src = read('services/scenario-runner/src/k8s.ts');
+  // Projected tokens rotate about hourly; a token cached at startup 401s after that.
+  const api = src.slice(src.indexOf('function api'));
+  assert.match(api.slice(0, api.indexOf('\n}')), /readToken\(\)/, 'api() must call readToken() per request');
+  assert.doesNotMatch(src, /^const\s+\w*[Tt]oken\w*\s*=\s*read(IfPresent|FileSync)/m, 'no module-level token cache');
+});
+
+test('deploy --skip-build resolves each image tag on its own', () => {
+  const deploy = read('scripts/deploy.sh');
+  assert.match(deploy, /--repository "\$\{repo\}"/, 'tag lookup must be per repository');
+  assert.doesNotMatch(deploy, /--repository scenario-controller --orderby/, 'one shared tag rolls back hotfixed images');
+  for (const v of ['CONTROLLER_IMAGE:scenario-controller', 'RUNNER_IMAGE:scenario-runner', 'BURNER_IMAGE:resource-burner',
+                   'MAGIC8BALL_STABLE_IMAGE:magic8ball', 'MAGIC8BALL_BAD_IMAGE:magic8ball-bad']) {
+    assert.ok(deploy.includes(v), `${v} must be resolved`);
+  }
+});
+
 test('the GitHub repository is registered on the agent as a code repository', () => {
   const cfg = read('scripts/configure-sre-agent-integrations.sh');
   assert.match(cfg, /sre_dp PUT "\/api\/v2\/repos\/\$\{REPO_NAME\}"/);

@@ -902,22 +902,29 @@ IMAGE_TAG="${IMAGE_TAG:-${GIT_COMMIT}}"
 # current when they were built, which is not necessarily HEAD now. Deriving the
 # tag from HEAD would reference an image that was never built, so resolve it
 # from the registry instead. An explicit IMAGE_TAG always wins.
-if [[ "${SKIP_BUILD}" == "true" && -z "${IMAGE_TAG_EXPLICIT:-}" ]]; then
-  EXISTING_TAG="$(az acr repository show-tags --name "${ACR_NAME}" \
-    --repository scenario-controller --orderby time_desc --top 1 -o tsv 2>/dev/null | head -1 || true)"
-  if [[ -n "${EXISTING_TAG}" && "${EXISTING_TAG}" != "${IMAGE_TAG}" ]]; then
-    warn "Using image tag '${EXISTING_TAG}' found in ACR rather than current commit '${IMAGE_TAG}'"
-    IMAGE_TAG="${EXISTING_TAG}"
-  elif [[ -z "${EXISTING_TAG}" ]]; then
-    die "--skip-build was given but no images were found in ${ACR_NAME}. Run without --skip-build first."
+#
+# Each repository is resolved on its own: a single image may have been rebuilt
+# alone (e.g. a scenario-runner hotfix), and one shared tag would silently roll
+# it back to the older build.
+image_ref() {
+  local repo="$1" tag="${IMAGE_TAG}"
+  if [[ "${SKIP_BUILD}" == "true" && -z "${IMAGE_TAG_EXPLICIT:-}" ]]; then
+    tag="$(az acr repository show-tags --name "${ACR_NAME}" \
+      --repository "${repo}" --orderby time_desc --top 1 -o tsv 2>/dev/null | head -1 || true)"
   fi
-fi
+  [[ -n "${tag}" ]] && printf '%s/%s:%s' "${ACR_LOGIN_SERVER}" "${repo}" "${tag}"
+}
 
-CONTROLLER_IMAGE="${ACR_LOGIN_SERVER}/scenario-controller:${IMAGE_TAG}"
-MAGIC8BALL_STABLE_IMAGE="${ACR_LOGIN_SERVER}/magic8ball:${IMAGE_TAG}"
-MAGIC8BALL_BAD_IMAGE="${ACR_LOGIN_SERVER}/magic8ball-bad:${IMAGE_TAG}"
-RUNNER_IMAGE="${ACR_LOGIN_SERVER}/scenario-runner:${IMAGE_TAG}"
-BURNER_IMAGE="${ACR_LOGIN_SERVER}/resource-burner:${IMAGE_TAG}"
+for _ref in CONTROLLER_IMAGE:scenario-controller MAGIC8BALL_STABLE_IMAGE:magic8ball \
+            MAGIC8BALL_BAD_IMAGE:magic8ball-bad RUNNER_IMAGE:scenario-runner BURNER_IMAGE:resource-burner; do
+  _img="$(image_ref "${_ref#*:}" || true)"
+  [[ -n "${_img}" ]] || die "--skip-build was given but ${_ref#*:} has no image in ${ACR_NAME}. Run without --skip-build first."
+  [[ "${_img##*:}" == "${IMAGE_TAG}" ]] || warn "Using ${_ref#*:}:${_img##*:} from ACR rather than current commit '${IMAGE_TAG}'"
+  printf -v "${_ref%%:*}" '%s' "${_img}"
+done
+unset _ref _img
+# Recorded in .lab-state.json and the controller's build info.
+IMAGE_TAG="${CONTROLLER_IMAGE##*:}"
 
 if [[ "${SKIP_BUILD}" == "true" ]]; then
   step "15/20  Skipping image build (--skip-build)"
