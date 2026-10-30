@@ -675,6 +675,11 @@ test('the GitHub repository is registered on the agent as a code repository', ()
   assert.match(read('.env.example'), /^GITHUB_REPO=dmauser\/az-sre-dtrace-snow$/m);
   assert.match(read('.env.example'), /^GITHUB_PAT=$/m, 'never commit a token value');
   assert.match(read('scripts/validate.sh'), /\/api\/v2\/repos/);
+  assert.match(read('scripts/validate.sh'), /\/api\/v2\/repos\/\$\{gh_name\}\/test/, 'validate.sh must test read access');
+  const doc = read('docs/AZURE-SRE-AGENT-SETUP.md');
+  assert.match(doc, /Option A — authorize GitHub in the portal \(OAuth/);
+  assert.match(doc, /Builder → Code access/);
+  assert.match(doc, /Option B — fine-grained personal access token/);
 });
 
 test('the SRE agent is wired to ServiceNow the way the portal does it', () => {

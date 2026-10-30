@@ -347,6 +347,14 @@ if [[ -n "${AGENT_NAME}" && ( "$(state_get dynatraceEnabled false)" == "true" ||
       report "Agent has code repository ${gh_name}" \
         "$(jq -e --arg n "${gh_name}" '[.value[]? | select(.name == $n)] | length > 0' >/dev/null 2>&1 <<<"${body}" && echo true || echo false)" \
         "fix with ./scripts/configure-sre-agent-integrations.sh"
+      # Reading a private repo needs a credential only a human can grant (OAuth)
+      # or supply (GITHUB_PAT), so missing access is a skip, not a failure.
+      body="$(sre_dp POST "/api/v2/repos/${gh_name}/test" | _http_body)"
+      if jq -e '.isSuccessful == true' >/dev/null 2>&1 <<<"${body}"; then
+        report "Agent can read ${GITHUB_REPO}" true
+      else
+        skip "Agent cannot read ${GITHUB_REPO} yet; authorize GitHub (docs/AZURE-SRE-AGENT-SETUP.md section 2)"
+      fi
     fi
     if [[ "$(state_get servicenowEnabled false)" == "true" ]]; then
       body="$(sre_dp GET /api/v2/incidentManagement/checkConnectivityDetailed | _http_body)"

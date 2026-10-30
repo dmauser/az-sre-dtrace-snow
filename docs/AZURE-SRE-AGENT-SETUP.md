@@ -136,19 +136,67 @@ that caused it — which is what makes scenario 03 land properly.
 
 `scripts/configure-sre-agent-integrations.sh` (run by `deploy.sh`) registers `GITHUB_REPO`
 (default `dmauser/az-sre-dtrace-snow`) under **Builder → Code access** with the same data-plane
-call the portal makes (`PUT /api/v2/repos/<name>`, type `GitHub`). Because the repository is
-private, the agent also needs a GitHub credential. Pick one:
+call the portal makes (`PUT /api/v2/repos/<name>`, type `GitHub`). Registering is not enough:
+the repository is private, so until the agent holds a GitHub credential it cannot clone it and
+the script prints:
 
-- **Fine-grained PAT (scripted)** — create a token limited to this one repository with
-  **Contents: Read** and **Metadata: Read**, put it in `.env` as `GITHUB_PAT` (or enter it when
-  `scripts/setup-integrations.ps1` asks), and re-run `./scripts/configure-sre-agent-integrations.sh`.
-  The script stores it on the agent (`PUT /api/v2/github/domains/github_com`) and tests access.
-- **OAuth (portal)** — open the agent → **Builder → Code access**, select the repository and
-  **Authorize** GitHub. OAuth consent needs an interactive sign-in, so this cannot be scripted.
+```text
+WARN Agent cannot read dmauser/az-sre-dtrace-snow yet: GitHub API returned NotFound ... "status":"404"
+```
 
-Until one of these is done the script reports `Agent cannot read ... yet` (GitHub returns 404
-for a private repository without credentials) and `validate.sh` still passes the
-"Agent has code repository" check, because the repository is registered.
+GitHub answers 404, not 403, for a private repository the caller cannot see. Authenticate the
+agent once, using one of the two options below.
+
+### Option A — authorize GitHub in the portal (OAuth, recommended)
+
+This is how the reference lab is authenticated. It is a one-time, interactive step per agent.
+
+1. Open the [Azure SRE Agent portal](https://sre.azure.com) and select your agent
+   (`sre-agent-<suffix>`).
+2. Go to **Builder → Code access**. The repository `az-sre-dtrace-snow` is already listed
+   (added by the script).
+3. Select the repository and choose **Authorize** (or **Sign in with GitHub**).
+4. In the GitHub pop-up, sign in as an account that can read the repository (the owner, e.g.
+   `dmauser`), and approve the requested access. If GitHub asks which repositories to grant,
+   include `az-sre-dtrace-snow` — a private repository must be selected explicitly.
+5. Back in the portal, confirm the repository shows as connected and its clone completes.
+6. Verify from the command line:
+
+   ```bash
+   ./scripts/configure-sre-agent-integrations.sh   # GitHub section: PASS Agent can read dmauser/az-sre-dtrace-snow
+   ./scripts/validate.sh                           # PASS Agent can read dmauser/az-sre-dtrace-snow
+   ```
+
+The authorization is stored on the agent (connection `github.com|<your-github-user>`, auth
+type `OAuth`), not in `.env`, so it survives re-running `deploy.sh` and the configure script.
+It is lost only if the agent itself is deleted and recreated — then repeat these steps.
+
+### Option B — fine-grained personal access token (scripted)
+
+Use this where interactive consent is not possible (automation, or GitHub org policy blocks the
+OAuth app).
+
+1. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens →
+   Generate new token**.
+2. **Repository access:** *Only select repositories* → `az-sre-dtrace-snow`.
+3. **Permissions:** *Contents: Read-only* and *Metadata: Read-only*. Nothing else.
+4. Put it in `.env` as `GITHUB_PAT=` (or paste it when `scripts/setup-integrations.ps1` asks —
+   it checks the token can read the repository before saving it). `.env` is git-ignored.
+5. Run `./scripts/configure-sre-agent-integrations.sh`. It stores the token on the agent
+   (`PUT /api/v2/github/domains/github_com`) and tests access.
+
+Fine-grained tokens expire; when access starts failing, rotate the token and re-run step 5.
+
+### Checking the connection
+
+| Signal | Authenticated | Not authenticated |
+|--------|---------------|-------------------|
+| Configure script, GitHub section | `PASS Agent can read ...` | `WARN Agent cannot read ... yet` (404) |
+| `validate.sh` | `PASS Agent can read ...` | `SKIP Agent cannot read ... yet` |
+| `GET /api/v2/repos` on the agent | `cloneStatus: Ready`, `connection.authType: OAuth` (or PAT) | no connection, clone fails |
+
+`validate.sh` treats missing authorization as a skip, not a failure, because only a human can
+grant it; the lab is fully functional without code access, the agent just cannot cite source.
 
 What the agent gains: the Bicep templates, Kubernetes manifests, application source and
 `docs/scenarios/` — so it can reason about intended state, not just observed state.
@@ -547,7 +595,8 @@ Automated by `scripts/deploy.sh --with-agent`:
 Still yours to do, on purpose:
 
 1. **Authorize GitHub** — the repository is registered automatically, but reading a private
-   repository needs either a `GITHUB_PAT` or interactive OAuth consent in the portal.
+   repository needs interactive OAuth consent in the portal or a `GITHUB_PAT`
+   (see [section 2](#2-connect-the-private-github-repository)).
 2. **Grant the agent write access** — `scripts/enable-sre-remediation.sh`, kept a separate
    command so that giving an automated agent write access is never a side effect of deploying
    a demo. Read access (above) is automatic; write access never is.

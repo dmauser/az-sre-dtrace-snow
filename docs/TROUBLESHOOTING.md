@@ -346,6 +346,16 @@ A Bicep redeploy resets the agent's incident platform, so `deploy.sh` always re-
 The connector's `endpoint` shows as `null` in ARM and in the portal JSON view. That is
 redaction; the connector's `/tools` route is the real check.
 
+### Agent cannot read the GitHub repository
+
+`configure-sre-agent-integrations.sh` prints `Agent cannot read ... yet: GitHub API returned
+NotFound` (HTTP 404) and `validate.sh` skips **Agent can read ...**. The repository is
+registered but the agent has no GitHub credential, and GitHub hides private repositories behind
+404. Authorize GitHub once in the portal (agent → **Builder → Code access** → repository →
+**Authorize**) or set a fine-grained `GITHUB_PAT` and re-run the configure script — see
+[AZURE-SRE-AGENT-SETUP.md § 2](AZURE-SRE-AGENT-SETUP.md#2-connect-the-private-github-repository).
+With a PAT, a later failure usually means the token expired: rotate it and re-run.
+
 ### Redeploy fails on the VMs
 
 | Error | Cause / fix |
