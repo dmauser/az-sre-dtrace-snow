@@ -790,4 +790,9 @@ test('controller generates steady /api/answer traffic so scenario 03 can alert',
   assert.ok(perTick && Number(perTick[1]) >= 1, 'SYNTHETIC_ANSWERS_PER_TICK must default to at least 1');
   const app = read('apps/magic8ball/backend/src/index.ts');
   assert.match(app, /x-sre-demo-synthetic/, 'Magic 8 Ball must skip persisting synthetic answers');
+  // Kube probes on /healthz outnumber user traffic and always pass; counting them held
+  // the ratio at ~0.1 with the bad build serving, under the 0.2 threshold.
+  assert.match(app, /PROBE_PATHS = new Set\(\['\/healthz', '\/readyz'\]\)/, 'probe paths must be listed');
+  assert.match(app, /if \(!PROBE_PATHS\.has\(req\.path\)\) \{\s*dynatrace\.push\('sre_demo_magic8ball_request_failed'/,
+    'request_failed must exclude probe paths');
 });

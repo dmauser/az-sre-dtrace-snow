@@ -65,7 +65,7 @@ export const config = {
      * path, so without steady traffic its failure-rate detector has nothing to measure.
      * 0 disables.
      */
-    syntheticAnswersPerTick: int('SYNTHETIC_ANSWERS_PER_TICK', 3),
+    syntheticAnswersPerTick: int('SYNTHETIC_ANSWERS_PER_TICK', 6),
   },
 
   dynatrace: {
