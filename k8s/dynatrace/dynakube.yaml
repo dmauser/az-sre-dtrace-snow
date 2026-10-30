@@ -1,0 +1,62 @@
+# DynaKube for the lab AKS cluster. Rendered by scripts/lib-integrations.sh
+# (dynatrace_install_operator); placeholders are replaced at deploy time.
+#
+# cloudNativeFullStack: the OneAgent DaemonSet monitors every node (host CPU and
+# memory feed the "02 AKS node ... pressure" metric events through the host
+# group), while application code modules are injected only into the sre-demo
+# namespace so platform pods are left alone.
+apiVersion: dynatrace.com/v1beta5
+kind: DynaKube
+metadata:
+  name: sre-demo
+  namespace: dynatrace
+  annotations:
+    feature.dynatrace.com/k8s-app-enabled: "true"
+spec:
+  apiUrl: __DT_API_URL__
+  tokens: dynakube-sre-demo
+  metadataEnrichment:
+    enabled: true
+  oneAgent:
+    hostGroup: __DT_AKS_HOST_GROUP__
+    cloudNativeFullStack:
+      # Public-registry image resolved by deploy (dt_resolve_oneagent_image);
+      # the line is dropped to fall back to the environment registry.
+      image: __DT_ONEAGENT_IMAGE__
+      # The injected install-oneagent init container defaults to a 30Mi memory
+      # request, below the sre-demo LimitRange minimum (32Mi), which makes the
+      # API server reject every lab pod. Size it explicitly within that range.
+      initResources:
+        requests:
+          cpu: 30m
+          memory: 32Mi
+        limits:
+          cpu: 300m
+          memory: 64Mi
+      namespaceSelector:
+        matchExpressions:
+          - key: kubernetes.io/metadata.name
+            operator: In
+            values:
+              - sre-demo
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+  activeGate:
+    capabilities:
+      - routing
+      - kubernetes-monitoring
+    group: sre-demo-__LAB_SUFFIX__
+    # The lab runs on a single small node; keep the ActiveGate lean so the
+    # baseline never trips the node-pressure scenario by itself.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
