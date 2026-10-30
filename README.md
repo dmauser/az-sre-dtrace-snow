@@ -240,8 +240,8 @@ Docker is **not** required locally — images are built in Azure with `az acr bu
 ## Quick start
 
 ```bash
-git clone https://github.com/dmauser/az-sre-dynatrace-servicenow.git
-cd az-sre-dynatrace-servicenow
+git clone https://github.com/dmauser/az-sre-dtrace-snow.git
+cd az-sre-dtrace-snow
 
 cp .env.example .env    # fill in DT_ENV_URL, DT_API_TOKEN, DT_PLATFORM_TOKEN,
                         # SNOW_INSTANCE_URL, SNOW_ADMIN_USER, SNOW_ADMIN_PASSWORD
