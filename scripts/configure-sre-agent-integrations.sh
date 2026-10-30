@@ -84,7 +84,9 @@ else
       dataConnectorType: "Mcp",
       dataSource: $e,
       identity: "system",
-      extendedProperties: { type: "http", endpoint: $e, authType: "BearerToken", bearerToken: $t }
+      # partnerType makes the portal show it as the built-in Dynatrace connector
+      # (same body the portal sends from Builder > Connectors > Dynatrace).
+      extendedProperties: { type: "http", endpoint: $e, authType: "BearerToken", bearerToken: $t, partnerType: "DynatraceMcp" }
     }
   }' > "${body}"
   CONNECTOR_URL="https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.App/agents/${AGENT_NAME}/connectors/${DT_CONNECTOR_NAME}?api-version=${CONNECTOR_API_VERSION}"
