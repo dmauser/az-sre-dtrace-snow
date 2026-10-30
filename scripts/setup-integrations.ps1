@@ -444,6 +444,23 @@ if ($SkipServiceNow) {
     }
 }
 
+# --- GitHub (SRE Agent code access) ------------------------------------------
+
+$ghRepo = Get-EnvValue 'GITHUB_REPO'
+if ($ghRepo) {
+    Write-Step "GitHub repository $ghRepo"
+    $ghPrompt = "GitHub fine-grained PAT for $ghRepo (Contents + Metadata read-only; Enter to use portal OAuth instead)"
+    $null = Get-ValidValue -Key 'GITHUB_PAT' -Prompt $ghPrompt -Secret -Optional -Validate {
+        param($v)
+        $r = Invoke-LabHttp -Method GET -Uri "https://api.github.com/repos/$ghRepo" -Headers @{
+            Authorization = "Bearer $v"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'sre-demo-lab' }
+        if ($r.Code -eq 200) { return $null }
+        "GitHub returned HTTP $($r.Code) for $ghRepo with that token (needs access to this repo)"
+    }
+    if (Get-EnvValue 'GITHUB_PAT') { Write-Ok "GITHUB_PAT can read $ghRepo" }
+    else { Write-Warn "No GITHUB_PAT: authorize GitHub for the agent in the portal (Builder > Code access)" }
+}
+
 # --- Summary -----------------------------------------------------------------
 
 Write-Host ''

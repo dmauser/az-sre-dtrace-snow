@@ -341,6 +341,13 @@ if [[ -n "${AGENT_NAME}" && ( "$(state_get dynatraceEnabled false)" == "true" ||
       report "Dynatrace connector is the built-in Dynatrace type" "$([[ "${pt}" == "DynatraceMcp" ]] && echo true || echo false)" \
         "partnerType ${pt}; fix with ./scripts/configure-sre-agent-integrations.sh"
     fi
+    if [[ -n "${GITHUB_REPO:-}" ]]; then
+      gh_name="${GITHUB_REPO%.git}"; gh_name="${gh_name##*/}"
+      body="$(sre_dp GET /api/v2/repos | _http_body)"
+      report "Agent has code repository ${gh_name}" \
+        "$(jq -e --arg n "${gh_name}" '[.value[]? | select(.name == $n)] | length > 0' >/dev/null 2>&1 <<<"${body}" && echo true || echo false)" \
+        "fix with ./scripts/configure-sre-agent-integrations.sh"
+    fi
     if [[ "$(state_get servicenowEnabled false)" == "true" ]]; then
       body="$(sre_dp GET /api/v2/incidentManagement/checkConnectivityDetailed | _http_body)"
       report "Agent connected to ServiceNow" \

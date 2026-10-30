@@ -134,16 +134,21 @@ afterwards.
 Connecting the repository lets the agent correlate an incident with the code and configuration
 that caused it — which is what makes scenario 03 land properly.
 
-1. Open your agent in the portal.
-2. Go to **Connections** (or **Integrations**) → **GitHub**.
-3. Select **Connect** and complete the OAuth flow.
-4. Grant access to **`F0bsterz/azure-sre-agent-demo-lab`** — this is a private repository, so it
-   must be selected explicitly.
-5. Confirm the connection shows as **Connected**.
+`scripts/configure-sre-agent-integrations.sh` (run by `deploy.sh`) registers `GITHUB_REPO`
+(default `dmauser/az-sre-dtrace-snow`) under **Builder → Code access** with the same data-plane
+call the portal makes (`PUT /api/v2/repos/<name>`, type `GitHub`). Because the repository is
+private, the agent also needs a GitHub credential. Pick one:
 
-> **This step cannot be automated.** OAuth consent requires an interactive sign-in. If the
-> connection fails, confirm you are an owner of the repository (or of the organisation) and that
-> your policy permits the GitHub App.
+- **Fine-grained PAT (scripted)** — create a token limited to this one repository with
+  **Contents: Read** and **Metadata: Read**, put it in `.env` as `GITHUB_PAT` (or enter it when
+  `scripts/setup-integrations.ps1` asks), and re-run `./scripts/configure-sre-agent-integrations.sh`.
+  The script stores it on the agent (`PUT /api/v2/github/domains/github_com`) and tests access.
+- **OAuth (portal)** — open the agent → **Builder → Code access**, select the repository and
+  **Authorize** GitHub. OAuth consent needs an interactive sign-in, so this cannot be scripted.
+
+Until one of these is done the script reports `Agent cannot read ... yet` (GitHub returns 404
+for a private repository without credentials) and `validate.sh` still passes the
+"Agent has code repository" check, because the repository is registered.
 
 What the agent gains: the Bicep templates, Kubernetes manifests, application source and
 `docs/scenarios/` — so it can reason about intended state, not just observed state.
@@ -541,7 +546,8 @@ Automated by `scripts/deploy.sh --with-agent`:
 
 Still yours to do, on purpose:
 
-1. **Connect GitHub** — interactive OAuth consent; a human has to approve it.
+1. **Authorize GitHub** — the repository is registered automatically, but reading a private
+   repository needs either a `GITHUB_PAT` or interactive OAuth consent in the portal.
 2. **Grant the agent write access** — `scripts/enable-sre-remediation.sh`, kept a separate
    command so that giving an automated agent write access is never a side effect of deploying
    a demo. Read access (above) is automatic; write access never is.

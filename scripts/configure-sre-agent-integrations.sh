@@ -16,6 +16,12 @@
 #   lab's incidents to the agent. These are the same calls the portal makes.
 #   If any step fails it prints the portal steps instead; the password is then
 #   in .secrets/ (mode 0600) unless --show-password is given.
+#
+# GitHub: registers GITHUB_REPO (owner/name) as a code repository on the agent
+#   (Builder > Code access). For a private repo the agent also needs a GitHub
+#   credential: GITHUB_PAT (fine-grained, this repo only, Contents + Metadata
+#   read-only) is stored on the agent when set; otherwise authorize GitHub once
+#   in the portal (OAuth), as the script prints.
 # -----------------------------------------------------------------------------
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -116,6 +122,48 @@ else
     die "Could not create the Dynatrace connector: $(echo "${err}" | head -3)"
   fi
   rm -f "${body}"
+fi
+
+# --- GitHub code repository --------------------------------------------------
+
+step "GitHub code repository"
+if [[ -z "${GITHUB_REPO:-}" ]]; then
+  info "GITHUB_REPO is not set; skipping"
+elif [[ "${DP_READY}" != "true" ]]; then
+  warn "Agent data plane unavailable; add https://github.com/${GITHUB_REPO} under Builder > Code access"
+else
+  GITHUB_REPO="${GITHUB_REPO#https://github.com/}"; GITHUB_REPO="${GITHUB_REPO%.git}"
+  REPO_URL="https://github.com/${GITHUB_REPO}"
+  REPO_NAME="${GITHUB_REPO##*/}"
+  if [[ -n "${GITHUB_PAT:-}" ]]; then
+    # Same call as the portal's "Personal access token" option; domain key is
+    # the host with dots replaced by underscores.
+    resp="$(sre_dp PUT /api/v2/github/domains/github_com "$(jq -cn --arg p "${GITHUB_PAT}" '{authType:"Pat", pat:$p}')")"
+    if [[ "$(_http_code <<<"${resp}")" =~ ^20[0-9]$ ]]; then
+      ok "GitHub credential (GITHUB_PAT) stored on the agent"
+    else
+      warn "Could not store GITHUB_PAT (HTTP $(_http_code <<<"${resp}")): $(_http_body <<<"${resp}" | head -c 200)"
+    fi
+  fi
+  body="$(jq -cn --arg n "${REPO_NAME}" --arg u "${REPO_URL}" '{
+    name: $n, type: "CodeRepo",
+    properties: { url: $u, type: "GitHub",
+      description: "SRE demo lab source: Magic 8 Ball app, scenario-runner, Kubernetes manifests, Bicep and Terraform." }
+  }')"
+  resp="$(sre_dp PUT "/api/v2/repos/${REPO_NAME}" "${body}")"
+  if [[ "$(_http_code <<<"${resp}")" =~ ^20[0-9]$ ]] && jq -e . >/dev/null 2>&1 <<<"$(_http_body <<<"${resp}")"; then
+    ok "Code repository ${REPO_NAME} -> ${REPO_URL}"
+    test_body="$(sre_dp POST "/api/v2/repos/${REPO_NAME}/test" | _http_body)"
+    if jq -e '(.isSuccessful // .success // .isConnected // false) == true' >/dev/null 2>&1 <<<"${test_body}"; then
+      ok "Agent can read ${GITHUB_REPO}"
+    else
+      warn "Agent cannot read ${GITHUB_REPO} yet: $(jq -r '.errorMessage // .message // .error // .status // empty' 2>/dev/null <<<"${test_body}" | head -c 200)"
+      info "Private repo: set GITHUB_PAT in .env (fine-grained, this repo only, Contents + Metadata read-only)"
+      info "and re-run, or authorize GitHub in the portal: Builder > Code access > ${REPO_NAME}"
+    fi
+  else
+    warn "Could not register the repository (HTTP $(_http_code <<<"${resp}")); add ${REPO_URL} under Builder > Code access"
+  fi
 fi
 
 # --- ServiceNow incident platform -------------------------------------------

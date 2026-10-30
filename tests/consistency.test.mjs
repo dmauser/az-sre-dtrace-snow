@@ -664,6 +664,19 @@ test('the Dynatrace connector is created as the portal built-in Dynatrace connec
   assert.match(read('scripts/validate.sh'), /partnerType[\s\S]*DynatraceMcp/);
 });
 
+test('the GitHub repository is registered on the agent as a code repository', () => {
+  const cfg = read('scripts/configure-sre-agent-integrations.sh');
+  assert.match(cfg, /sre_dp PUT "\/api\/v2\/repos\/\$\{REPO_NAME\}"/);
+  assert.match(cfg, /type: "CodeRepo"/);
+  assert.match(cfg, /url: \$u, type: "GitHub"/);
+  assert.match(cfg, /\/api\/v2\/github\/domains\/github_com/, 'GITHUB_PAT must be stored for private repos');
+  // The GitHub section must run before the ServiceNow section, which exits early when unset.
+  assert.ok(cfg.indexOf('step "GitHub code repository"') < cfg.indexOf('step "ServiceNow incident platform"'));
+  assert.match(read('.env.example'), /^GITHUB_REPO=dmauser\/az-sre-dtrace-snow$/m);
+  assert.match(read('.env.example'), /^GITHUB_PAT=$/m, 'never commit a token value');
+  assert.match(read('scripts/validate.sh'), /\/api\/v2\/repos/);
+});
+
 test('the SRE agent is wired to ServiceNow the way the portal does it', () => {
   const cfg = read('scripts/configure-sre-agent-integrations.sh');
   // Basic auth: connectionKey is a JSON document, not the bare password.
