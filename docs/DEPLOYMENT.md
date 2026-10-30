@@ -93,7 +93,7 @@ reused when `--suffix` is supplied.
 --location <region>    Azure region (default: eastus)
 --suffix <string>      Reuse a specific lab suffix
 --admin-cidr <cidr>    Allowed inbound CIDR. Repeatable; prompted for when omitted
---skip-build           Do not rebuild container images
+--skip-build           Do not rebuild container images (uses each image's newest tag in ACR)
 --skip-apps            Deploy infrastructure only
 --with-agent           Also create an Azure SRE Agent (off by default; chargeable)
 --agent-mode <mode>    ReadOnly | Review (default) | Autonomous
