@@ -60,6 +60,12 @@ export const config = {
     roleName: str('OTEL_SERVICE_NAME', 'scenario-controller'),
     /** How often the synthetic probe loop runs. Short, so a demo shows movement. */
     probeIntervalMs: int('PROBE_INTERVAL_MS', 20_000),
+    /**
+     * POST /api/answer calls per probe tick. Scenario 03's regression only shows on that
+     * path, so without steady traffic its failure-rate detector has nothing to measure.
+     * 0 disables.
+     */
+    syntheticAnswersPerTick: int('SYNTHETIC_ANSWERS_PER_TICK', 3),
   },
 
   dynatrace: {

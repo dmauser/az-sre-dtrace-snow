@@ -155,7 +155,9 @@ app.post('/api/answer', async (req, res) => {
   if (!choice) return res.status(500).json({ error: 'no answer available' });
 
   const latencyMs = Date.now() - started;
-  const persisted = await saveAnswer({
+  // The controller's synthetic traffic would otherwise fill the history panel.
+  const synthetic = req.get('x-sre-demo-synthetic') === '1';
+  const persisted = synthetic ? false : await saveAnswer({
     question,
     answer: choice.text,
     sentiment: choice.sentiment,

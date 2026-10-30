@@ -777,3 +777,17 @@ test('the SRE agent is wired to ServiceNow the way the portal does it', () => {
   assert.match(val, /checkConnectivityDetailed/);
 });
 
+
+test('controller generates steady /api/answer traffic so scenario 03 can alert', () => {
+  // The bad build only fails POST /api/answer and /healthz always passes. Without
+  // synthetic answer traffic the request_failed ratio stays ~0 and no problem ever opens.
+  const health = read('apps/scenario-controller/backend/src/health.ts');
+  const loop = health.slice(health.indexOf('export function startProbeLoop'));
+  assert.match(loop, /sendSyntheticAnswers\(\)/, 'startProbeLoop must call sendSyntheticAnswers()');
+  assert.match(health, /\/api\/answer`[\s\S]{0,80}method: 'POST'/, 'synthetic traffic must POST /api/answer');
+  const config = read('apps/scenario-controller/backend/src/config.ts');
+  const perTick = config.match(/SYNTHETIC_ANSWERS_PER_TICK', (\d+)\)/);
+  assert.ok(perTick && Number(perTick[1]) >= 1, 'SYNTHETIC_ANSWERS_PER_TICK must default to at least 1');
+  const app = read('apps/magic8ball/backend/src/index.ts');
+  assert.match(app, /x-sre-demo-synthetic/, 'Magic 8 Ball must skip persisting synthetic answers');
+});
