@@ -126,5 +126,7 @@ can share one Dynatrace environment without paging each other's ServiceNow queue
 | `No schema with topic identifier 'builtin:anomaly-detection.metric-events'` | latest Dynatrace with an older checkout of this repo; pull and re-run — the mode is now detected |
 | Workflow execution: `Uncaught (in promise) 403: Forbidden` | a permission is missing from the authorization settings — usually `automation:workflows:read`; see the list above |
 | Deploy/validate: "has not been allowed to run workflows on your behalf" | do the one-time [authorization settings](#latest-dynatrace-allow-workflows-to-run-as-you-one-time) step |
+| Workflow execution (problem-triggered only): `403: The requested credential details cannot be accessed by the current user or entity` | the credential lacks `allow_contextless_requests`; manual runs carry a user context and pass. Terraform sets it — re-apply |
+| No `sre_demo.*` metrics; scenarios 02–06 never open a problem | app sinks posted to `/api/api/v2/metrics/ingest` (404). Fixed: `DT_API_URL` is the environment root. `validate.sh` reports "Controller metrics accepted by Dynatrace" |
 | Workflow execution: `credentialVault` 403 / credential not found | the workflow actor must be the API token's owner (credential is owner-only); create both tokens as the same user |
 | Workflow execution: fetch blocked / host not allowed | add the ServiceNow host under **Settings → General → External requests** |

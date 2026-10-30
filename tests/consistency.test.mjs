@@ -495,6 +495,10 @@ test('the platform workflow only routes lab problems and raises the same inciden
   assert.ok(impact + urgency <= 3, `impact ${impact} + urgency ${urgency} is below priority 2; the quickstart plan ignores it`);
   assert.match(js, /startsWith\(CONFIG\.titlePrefix/, 'the deploy smoke test relies on non-lab titles being skipped');
   assert.match(js, /credentialVaultClient\.getCredentialsDetails/, 'credentials must come from the vault, not the script');
+  // Problem-triggered runs have no user context; without this the credential read returns 403
+  // (seen live). Manual runs and the deploy smoke test never notice.
+  const cred = platform.match(/resource "dynatrace_credentials" "servicenow" \{[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(cred, /allow_contextless_requests\s*=\s*true/, 'the ServiceNow credential must allow contextless (event-triggered) requests');
   assert.ok(!/password\s*[:=]\s*['"]/.test(js), 'no literal password in the workflow script');
   // ex.event() rejects with 403 on manual runs; un-awaited, that escapes the try as an
   // unhandled rejection and fails the task before the title check (seen live).
