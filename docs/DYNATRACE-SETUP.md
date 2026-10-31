@@ -4,6 +4,21 @@ The lab needs two credentials from your Dynatrace environment. Everything else �
 per-lab tokens, the alert definitions and the Dynatrace → ServiceNow routing — is created by
 Terraform (`infra/terraform/integration/`) and destroyed with the lab.
 
+## 0. Get a Dynatrace environment (free trial)
+
+Dynatrace is **required** (unless you deploy with `--skip-dynatrace`). If you don't have an
+environment, a free trial is enough for the whole lab:
+
+1. Sign up at <https://www.dynatrace.com/signup/> with a work email.
+2. When provisioning finishes, note the environment URL
+   (`https://<env-id>.apps.dynatrace.com`). That is `DT_ENV_URL` below.
+3. Create the two tokens in sections 2 and 3 as the trial's admin user.
+
+New trials are on the latest Dynatrace platform, which the deploy detects and handles (see
+the next section). Trials are **time-limited** (currently 15 days): plan your demos inside
+that window, or ask Dynatrace to extend it or convert it. When the trial ends, problems stop
+reaching ServiceNow and the SRE Agent's Dynatrace tools stop answering.
+
 ## Classic vs latest Dynatrace
 
 The deploy detects which alerting model your environment has and builds the matching one.

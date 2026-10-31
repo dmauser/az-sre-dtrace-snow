@@ -230,8 +230,15 @@ Setup guides: **[docs/DYNATRACE-SETUP.md](docs/DYNATRACE-SETUP.md)** (tokens and
 | Bash | Linux/macOS natively; on Windows, Git Bash (bundled with Git for Windows) or WSL. |
 | Regional quota | 8 vCPU headroom in the target region (4 for the VMs, 2 per AKS node, 2 for the scenario 02 remediation). |
 | Terraform 1.6+ | Configures Dynatrace and ServiceNow. Not needed with `--skip-dynatrace`. |
-| Dynatrace environment | SaaS tenant (a trial works). An API token and a platform token — see [docs/DYNATRACE-SETUP.md](docs/DYNATRACE-SETUP.md). |
-| ServiceNow instance | A Personal Developer Instance works. Admin credentials — see [docs/SERVICENOW-SETUP.md](docs/SERVICENOW-SETUP.md). |
+| Dynatrace environment | **Required.** SaaS tenant — a [free trial](https://www.dynatrace.com/signup/) works. An API token and a platform token — see [docs/DYNATRACE-SETUP.md](docs/DYNATRACE-SETUP.md). |
+| ServiceNow instance | **Required.** A free [Personal Developer Instance (PDI)](https://developer.servicenow.com/) works. Admin credentials — see [docs/SERVICENOW-SETUP.md](docs/SERVICENOW-SETUP.md). |
+
+> **No Dynatrace or ServiceNow account?** Both can be created for free in a few minutes:
+> a [Dynatrace free trial](https://www.dynatrace.com/signup/) (time-limited SaaS tenant) and
+> a [ServiceNow Personal Developer Instance](https://developer.servicenow.com/) (free, but it
+> hibernates when idle and is reclaimed if you stop logging in). Step-by-step sign-up is in
+> [DYNATRACE-SETUP.md](docs/DYNATRACE-SETUP.md#0-get-a-dynatrace-environment-free-trial) and
+> [SERVICENOW-SETUP.md](docs/SERVICENOW-SETUP.md#0-get-a-servicenow-instance-free-pdi).
 
 Docker is **not** required locally — images are built in Azure with `az acr build`.
 

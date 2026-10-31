@@ -4,12 +4,33 @@ ServiceNow is the lab's incident platform. Dynatrace opens incidents in it, and 
 Agent picks them up from it. Terraform (`infra/terraform/integration/servicenow.tf`)
 creates the ServiceNow objects. Connecting the agent to ServiceNow is one portal step.
 
+## 0. Get a ServiceNow instance (free PDI)
+
+ServiceNow is **required** (unless you deploy with `--skip-servicenow`). If you don't have an
+instance, a free Personal Developer Instance (PDI) is enough for the whole lab:
+
+1. Create a free account at <https://developer.servicenow.com/> (**Sign up**).
+2. Sign in and choose **Request Instance**. Any current release works.
+3. When it is ready, the portal shows the instance URL
+   (`https://devNNNNNN.service-now.com`) and the `admin` password. Those are
+   `SNOW_INSTANCE_URL` and `SNOW_ADMIN_PASSWORD` below.
+
+Keep in mind:
+
+- A PDI **hibernates** when idle. Wake it from the developer portal before deploying or
+  demoing.
+- ServiceNow **reclaims** a PDI that you haven't logged in to for several days, and its data
+  is lost. Log in to the instance regularly. If it is reclaimed, request a new one and run
+  `deploy.sh` again: Terraform recreates every object the lab needs.
+
+See ServiceNow's [Personal developer instance guide](https://www.servicenow.com/docs/r/application-development/personal_developer_instance_guide.html)
+for the current hibernation and reclamation rules.
+
 ## 1. Instance and admin credentials
 
-A [Personal Developer Instance](https://developer.servicenow.com/) works. PDIs **hibernate**
-after inactivity, so wake yours from the developer portal before deploying. `deploy.sh`
-preflight fails fast with a clear message if the instance is asleep or the credentials are
-wrong.
+A [Personal Developer Instance](https://developer.servicenow.com/) works (see section 0).
+`deploy.sh` preflight fails fast with a clear message if the instance is asleep or the
+credentials are wrong.
 
 Put these in `.env` (on Windows, `.\scripts\setup-integrations.ps1` prompts for them, checks the
 login, the admin role and hibernation, and writes the file):
