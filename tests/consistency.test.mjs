@@ -796,3 +796,24 @@ test('controller generates steady /api/answer traffic so scenario 03 can alert',
   assert.match(app, /if \(!PROBE_PATHS\.has\(req\.path\)\) \{\s*dynatrace\.push\('sre_demo_magic8ball_request_failed'/,
     'request_failed must exclude probe paths');
 });
+
+test('CI manifest validation substitutes every Kubernetes placeholder', () => {
+  // validate.yml renders k8s/ with stand-in values before kubeconform; an unhandled
+  // placeholder (e.g. __ADMIN_CIDR_LIST__ at column 0) is invalid YAML and fails CI.
+  const workflow = read('.github/workflows/validate.yml');
+  const collect = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return collect(full);
+      return entry.name.endsWith('.yaml') ? [full] : [];
+    });
+  const placeholders = new Set();
+  for (const file of collect(join(repoRoot, 'k8s'))) {
+    const content = readFileSync(file, 'utf8').split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+    for (const match of content.matchAll(/__([A-Z0-9_]+)__/g)) placeholders.add(match[1]);
+  }
+  assert.ok(placeholders.size > 0);
+  for (const placeholder of placeholders) {
+    assert.ok(workflow.includes(`s|__${placeholder}__|`), `validate.yml does not substitute __${placeholder}__`);
+  }
+});

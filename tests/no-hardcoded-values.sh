@@ -24,8 +24,9 @@ echo "Portability checks"
 
 # --- GUIDs (subscription, tenant, object IDs) -------------------------------
 # Azure built-in role definition IDs are GUIDs and are legitimately constant, so
-# they are excluded by name.
-KNOWN_ROLE_IDS='7f951dda-4ed3-4680-a7ca-43fe172d538d|b24988ac-6180-42a0-ab88-20f7382dd24c|4633458b-17de-408a-b874-0445c86b69e6|b86a8fe4-44ce-4948-aee5-eccb2c155cd7|3913510d-42f4-4e42-8a64-420c390055eb|00000000-0000-0000-0000-000000000000'
+# they are excluded by name. Includes Network Contributor (4d97b98b-...) and
+# SRE Agent Administrator (e79298df-...).
+KNOWN_ROLE_IDS='4d97b98b-1d4f-4787-a291-c67834d212e7|e79298df-d852-4c6d-84f9-5d13249d1e55|7f951dda-4ed3-4680-a7ca-43fe172d538d|b24988ac-6180-42a0-ab88-20f7382dd24c|4633458b-17de-408a-b874-0445c86b69e6|b86a8fe4-44ce-4948-aee5-eccb2c155cd7|3913510d-42f4-4e42-8a64-420c390055eb|00000000-0000-0000-0000-000000000000'
 
 GUID_HITS="$(grep -rInE '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' \
   "${SCAN_PATHS[@]}" 2>/dev/null | grep -vE "${KNOWN_ROLE_IDS}" || true)"
