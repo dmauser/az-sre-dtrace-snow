@@ -125,6 +125,10 @@ jobs:
                 -e 's|__POSTGRES_DB__|sre_demo|g' \
                 -e 's|__POSTGRES_USER__|sre_app|g' \
                 -e 's|__ADMIN_CIDR__|203.0.113.0/32|g' \
+                -e 's|__ADMIN_CIDR_LIST__|    - 203.0.113.0/32|g' \
+                -e 's|__DT_API_URL__|https://example.live.dynatrace.com/api|g' \
+                -e 's|__DT_AKS_HOST_GROUP__|citest|g' \
+                -e 's|__DT_ONEAGENT_IMAGE__|example.azurecr.io/oneagent:test|g' \
                 -e 's|__LAB_SUFFIX__|citest|g' \
                 "$manifest" > "/tmp/rendered/$(basename $(dirname $manifest))-$(basename $manifest)"
           done
