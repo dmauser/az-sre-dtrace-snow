@@ -297,9 +297,28 @@ function logDegradedSignals(
   }
 }
 
+/**
+ * Steady user-like traffic on POST /api/answer. Magic 8 Ball records each request as
+ * sre_demo.magic8ball_request_failed, so this is what scenario 03's detector measures.
+ * Fire-and-forget: the bad build adds seconds of latency and must not stall the loop.
+ */
+function sendSyntheticAnswers(): void {
+  for (let index = 0; index < config.telemetry.syntheticAnswersPerTick; index += 1) {
+    void fetch(`${config.magic8ball.httpUrl}/api/answer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-sre-demo-synthetic': '1' },
+      body: JSON.stringify({ question: 'synthetic traffic' }),
+      signal: AbortSignal.timeout(15_000),
+    })
+      .then((response) => response.text())
+      .catch(() => undefined);
+  }
+}
+
 /** Publishes the sre_demo_* metric family on a short, demo-friendly cadence. */
 export function startProbeLoop(): NodeJS.Timeout {
   const tick = async () => {
+    sendSyntheticAnswers();
     try {
       const [disk, pg, tcp, magic8Http, magic8Tls, runner] = await Promise.all([
         diskUsage().catch(() => undefined),

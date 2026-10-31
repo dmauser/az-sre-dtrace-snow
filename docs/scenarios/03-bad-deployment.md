@@ -62,6 +62,17 @@ curl -X POST http://<app-vm-ip>:8080/api/scenarios/03/activate
 `scenario-runner` patches the Deployment to the `magic8ball-bad` image and annotates it
 `sre-demo/variant=bad`. Kubernetes performs a normal rolling update.
 
+**Traffic is generated for you.** The bad build fails only `POST /api/answer`, and the
+`/healthz` probe always passes, so a quiet app would never cross the 20% failure-rate
+threshold. The controller's probe loop therefore sends `SYNTHETIC_ANSWERS_PER_TICK`
+(default 6) answer requests every probe interval (default 20 s), always — not just during
+the scenario — so the baseline stays near 0% and recovery closes the problem. Those
+requests carry `x-sre-demo-synthetic: 1` and are not saved to the answer history.
+`/healthz` and `/readyz` are excluded from `sre_demo.magic8ball_request_failed`: the
+Kubernetes probes alone would otherwise outnumber user traffic and hold the ratio near
+10% even with the bad build serving.
+Expect the Dynatrace problem about 5 minutes after activation.
+
 ---
 
 ## Expected symptoms

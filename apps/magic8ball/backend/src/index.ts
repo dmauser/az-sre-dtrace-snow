@@ -79,6 +79,8 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
 
+const PROBE_PATHS = new Set(['/healthz', '/readyz']);
+
 app.use((req, res, next) => {
   const started = Date.now();
   res.on('finish', () => {
@@ -90,10 +92,14 @@ app.use((req, res, next) => {
       success: res.statusCode < 500,
       properties: { 'deployment.variant': build.variant, 'deployment.imageTag': build.imageTag },
     });
-    dynatrace.push('sre_demo_magic8ball_request_failed', res.statusCode >= 500 ? 1 : 0, {
-      'deployment.variant': build.variant,
-      'deployment.imagetag': build.imageTag,
-    });
+    // Probe paths always succeed and arrive far more often than user traffic; counting
+    // them would dilute scenario 03's failure ratio below its detector threshold.
+    if (!PROBE_PATHS.has(req.path)) {
+      dynatrace.push('sre_demo_magic8ball_request_failed', res.statusCode >= 500 ? 1 : 0, {
+        'deployment.variant': build.variant,
+        'deployment.imagetag': build.imageTag,
+      });
+    }
   });
   next();
 });
@@ -155,7 +161,9 @@ app.post('/api/answer', async (req, res) => {
   if (!choice) return res.status(500).json({ error: 'no answer available' });
 
   const latencyMs = Date.now() - started;
-  const persisted = await saveAnswer({
+  // The controller's synthetic traffic would otherwise fill the history panel.
+  const synthetic = req.get('x-sre-demo-synthetic') === '1';
+  const persisted = synthetic ? false : await saveAnswer({
     question,
     answer: choice.text,
     sentiment: choice.sentiment,
