@@ -204,8 +204,8 @@ ten minutes.
 Nothing is tied to the subscription this was first built in:
 
 ```bash
-git clone https://github.com/F0bsterz/azure-sre-agent-demo-lab.git
-cd azure-sre-agent-demo-lab
+git clone https://github.com/dmauser/az-sre-dtrace-snow.git
+cd az-sre-dtrace-snow
 az login
 ./scripts/deploy.sh --subscription <their-subscription-id> --location <their-region>
 ```

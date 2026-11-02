@@ -14,7 +14,8 @@ fault injected ─► Dynatrace OneAgent + sre_demo.* metrics ─► Dynatrace m
                ─► Azure SRE Agent picks it up from ServiceNow ─► investigates via Dynatrace MCP + Azure
 ```
 
-Based on [dmauser/azure-sre-agent-demo-lab](https://github.com/dmauser/azure-sre-agent-demo-lab).
+Built on the original [Azure SRE Agent Demo Lab](https://github.com/F0bsterz/azure-sre-agent-demo-lab)
+by [F0bsterz](https://github.com/F0bsterz) — see [Acknowledgements](#acknowledgements).
 Azure Monitor, Application Insights and Log Analytics stay in place **side by side**, so every
 scenario remains observable in both platforms. Dynatrace and ServiceNow are enabled by `.env`
 and can be switched off with `--skip-dynatrace` / `--skip-servicenow`, which gives you back
@@ -299,7 +300,7 @@ agent ask you for the things it genuinely cannot know, and to stop rather than g
 ```text
 Deploy the Azure SRE Agent demo lab into my own GitHub repository and Azure subscription.
 
-1. Fork https://github.com/F0bsterz/azure-sre-agent-demo-lab into my account as a PRIVATE
+1. Fork https://github.com/dmauser/az-sre-dtrace-snow into my account as a PRIVATE
    repository, clone it locally, and work on `main`.
 
 2. Check my prerequisites first and tell me what is missing instead of installing things
@@ -732,9 +733,21 @@ tests/         template and manifest tests
 
 ---
 
+## Acknowledgements
+
+This lab is built on the original
+**[Azure SRE Agent Demo Lab](https://github.com/F0bsterz/azure-sre-agent-demo-lab)** by
+[F0bsterz](https://github.com/F0bsterz). The infrastructure, the Magic 8 Ball app, the Scenario
+Controller and the six fault scenarios come from that project. This edition adds Dynatrace
+as the observability platform and ServiceNow as the incident platform, and wires both into
+Azure SRE Agent. Thank you to the original author for a great foundation. If you want the
+Azure Monitor and Log Analytics-only version, use the original repository.
+
+---
+
 ## Licence
 
-MIT. Provided as a demonstration environment; not intended for production use. See
+MIT, inherited from the original project (copyright F0bsterz). Provided as a demonstration environment; not intended for production use. See
 [LICENSE](LICENSE).
 
 ---
