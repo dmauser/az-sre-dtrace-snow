@@ -577,6 +577,29 @@ workflow grants Contributor **at that resource group only** — never subscripti
 
 Full narrative for each scenario: **[docs/SRE-DEMO-RUNBOOK.md](docs/SRE-DEMO-RUNBOOK.md)**.
 
+### What the end-to-end flow looks like
+
+These screenshots are from a real lab (suffix `2082a5`) after running all six scenarios.
+Each fault produced a Dynatrace problem, which opened a ServiceNow incident, which Azure SRE
+Agent picked up, investigated and completed. Every incident ended **Resolved**.
+
+**1. Dynatrace detects the fault and opens a problem.** Each lab detector is prefixed with
+`[sre-demo-<suffix>]`; the problem closes by itself once the condition recovers.
+
+![Dynatrace problems for the lab, all closed](docs/images/flow-1-dynatrace-problems.png)
+
+**2. The Dynatrace workflow opens a ServiceNow incident** with the same title, assigned to
+the `SRE Demo Lab` group at priority 2. When the problem closes, the workflow resolves it.
+
+![ServiceNow incidents created by the Dynatrace workflow](docs/images/flow-2-servicenow-incidents.png)
+
+**3. Azure SRE Agent picks up each incident** through `servicenow-lab-response-plan`,
+investigates through Dynatrace and Azure, and posts its findings back to the incident.
+Agent status **Completed** with incident status **Resolved** means the loop closed with no
+human input.
+
+![Azure SRE Agent incidents view: all completed and resolved](docs/images/flow-3-sre-agent-incidents.png)
+
 ---
 
 ## Resetting
