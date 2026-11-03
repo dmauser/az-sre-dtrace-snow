@@ -2,7 +2,8 @@
 
 The lab needs two credentials from your Dynatrace environment. Everything else — the
 per-lab tokens, the alert definitions and the Dynatrace → ServiceNow routing — is created by
-Terraform (`infra/terraform/integration/`) and destroyed with the lab.
+Terraform (`infra/terraform/integration/`) and destroyed with the lab. To create those objects
+by hand, see [MANUAL-SETUP.md](MANUAL-SETUP.md).
 
 ## 0. Get a Dynatrace environment (free trial)
 

@@ -204,6 +204,9 @@ share one Dynatrace environment and one ServiceNow instance without touching eac
 
 Setup guides: **[docs/DYNATRACE-SETUP.md](docs/DYNATRACE-SETUP.md)** (tokens and scopes) and
 **[docs/SERVICENOW-SETUP.md](docs/SERVICENOW-SETUP.md)** (instance, agent incident platform).
+To build the integration by hand instead of with `deploy.sh`, follow
+**[docs/MANUAL-SETUP.md](docs/MANUAL-SETUP.md)**: every detector, the workflow and the
+ServiceNow objects, with the exact values the deployment uses.
 
 ---
 
