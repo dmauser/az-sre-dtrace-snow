@@ -2,7 +2,7 @@
 
 ServiceNow is the lab's incident platform. Dynatrace opens incidents in it, and Azure SRE
 Agent picks them up from it. Terraform (`infra/terraform/integration/servicenow.tf`)
-creates the ServiceNow objects. Connecting the agent to ServiceNow is one portal step.
+creates the ServiceNow objects ([by hand](MANUAL-SETUP.md#1-servicenow-group-integration-user-role) if you prefer). Connecting the agent to ServiceNow is one portal step.
 
 ## 0. Get a ServiceNow instance (free PDI)
 
