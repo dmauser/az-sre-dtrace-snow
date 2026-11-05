@@ -199,6 +199,37 @@ flowchart LR
 | SRE Agent → Dynatrace MCP connector | `configure-sre-agent-integrations.sh` (ARM) | runs automatically with `--with-agent` |
 | SRE Agent → ServiceNow incident platform + response plan | `configure-sre-agent-integrations.sh` (ARM + agent API) | runs automatically with `--with-agent` |
 
+### How it works
+
+Dynatrace detects the fault, ServiceNow carries the incident to the agent, and the agent
+investigates by reading Dynatrace back through MCP. Dynatrace never calls the agent directly;
+the ServiceNow incident is the handoff.
+
+1. **Detect.** The lab's apps send `sre_demo.*` metrics, and OneAgent covers the VMs and AKS.
+   Eight detectors with static thresholds, all titled `[sre-demo-<suffix>] ...`, raise a Davis problem.
+2. **Open the incident.** A Dynatrace workflow is triggered on problem **open and close**, and
+   only for titles with the lab prefix. It reads the ServiceNow password from the Dynatrace
+   credential vault and creates an incident in group `SRE Demo Lab` with impact 2 and
+   urgency 1, which ServiceNow maps to **priority 2**. `correlation_id = dynatrace-<problem id>`
+   means a retry never creates a second incident.
+3. **Hand off.** The agent's incident platform is ServiceNow. It logs in as the
+   least-privilege `sre_demo_integration` user (`itil` role, web-service access only) and
+   indexes only `SRE Demo Lab`. The response plan `servicenow-lab-response-plan` accepts
+   priority 1–2, which is why the workflow sets priority 2. The agent picks up a new incident
+   within about a minute.
+4. **Investigate.** Through the **Dynatrace MCP connector** (platform token) the agent queries
+   problems, runs DQL and reads logs and Kubernetes events to find the root cause.
+5. **Remediate.** In Autonomous mode with access level High, the agent fixes the fault with its
+   managed identity's Azure RBAC on the lab resource group, for example by rolling back a
+   deployment or removing an NSG rule. It writes its findings to the incident.
+6. **Close.** When the metric recovers, the Davis problem closes and the same workflow marks
+   the incident **Resolved**, unless someone has already resolved it.
+
+Details: [MANUAL-SETUP.md → The contract](docs/MANUAL-SETUP.md#the-contract),
+[SERVICENOW-SETUP.md §3](docs/SERVICENOW-SETUP.md#3-connect-azure-sre-agent-automated),
+[AZURE-SRE-AGENT-SETUP.md §9](docs/AZURE-SRE-AGENT-SETUP.md#9-connect-dynatrace-and-servicenow).
+Screenshots of each stage: [What the end-to-end flow looks like](#what-the-end-to-end-flow-looks-like).
+
 Terraform state is local and per lab (`terraform.tfstate.d/<suffix>/`), so several labs can
 share one Dynatrace environment and one ServiceNow instance without touching each other.
 
