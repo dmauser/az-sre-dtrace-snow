@@ -77,7 +77,7 @@ themselves, or use to train an on-call team.
 > **Closed loop.** Dynatrace detects the fault and its workflow opens a ServiceNow incident.
 > The SRE Agent picks up that incident, investigates through the Dynatrace MCP server and
 > Azure, then remediates through its managed identity. When the problem clears, the workflow
-> resolves the incident. Azure Monitor (App Insights, Log Analytics, 7 alert rules) still runs
+> resolves the incident. Azure Monitor (App Insights, Log Analytics, 7 scheduled query rules) still runs
 > side by side for comparison. However, it is no longer the agent's incident source. See
 > [How it works](#how-it-works).
 
@@ -125,7 +125,7 @@ flowchart TB
     end
 
     subgraph azmon ["Azure Monitor (side by side)"]
-        law["App Insights · Container Insights<br/>→ Log Analytics → 7 alert rules"]
+        law["App Insights · Container Insights<br/>→ Log Analytics<br/>7 scheduled query rules"]
     end
 
     operator -->|"HTTP 8080"| appvm

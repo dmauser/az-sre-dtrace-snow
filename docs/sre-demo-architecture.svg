@@ -320,8 +320,8 @@
   <g filter="url(#sh)"><rect x="40" y="962" width="300" height="200" rx="14" fill="#FFFFFF" stroke="#8FA3B8" stroke-width="1.5" stroke-dasharray="6 4"/></g>
   <text x="60" y="992" class="title">Azure Monitor (side by side)</text>
   <g font-size="13" fill="#5A6B7B">
-    <text x="60" y="1018">App Insights · Container Insights</text>
-    <text x="60" y="1037">→ Log Analytics → 7 alert rules</text>
+    <text x="60" y="1018">App Insights · Container Insights →</text>
+    <text x="60" y="1037">Log Analytics · 7 scheduled query rules</text>
     <text x="60" y="1066">Still fires and shows in the portal for</text>
     <text x="60" y="1085">comparison, but is no longer the</text>
     <text x="60" y="1104">agent's incident source.</text>
