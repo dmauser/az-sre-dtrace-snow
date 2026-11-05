@@ -36,6 +36,8 @@
       .flow{fill:none;stroke:#0F6CBD;stroke-width:2.4;}
       .tele{fill:none;stroke:#7A56C2;stroke-width:2;stroke-dasharray:5 5;}
       .ctrl{fill:none;stroke:#0A8F8F;stroke-width:3;}
+      .dtt{font-size:14px;font-weight:700;fill:#4A2E86;}
+      .snt{font-size:14px;font-weight:700;fill:#1F3B3D;}
       .pin{font-size:12px;fill:#12324F;}
     </style>
 
@@ -72,7 +74,7 @@
     <path d="M10,20 l8,8 l16,-18" fill="none" stroke="#0B2545" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
   <text x="102" y="54" fill="#FFFFFF" font-size="32" font-weight="700">Azure SRE Agent — Self-Healing Demo Environment</text>
-  <text x="103" y="86" fill="#AFCDEC" font-size="16.5">Observe → detect → investigate — all inside one blast-radius-contained resource group. Automated remediation is out of scope.</text>
+  <text x="103" y="86" fill="#AFCDEC" font-size="16.5">Dynatrace detects → ServiceNow tickets → SRE Agent investigates &amp; remediates → incident auto-resolves — all inside one resource group.</text>
   <g transform="translate(1470,40)">
     <rect x="0" y="0" width="250" height="34" rx="17" fill="#0B2545" stroke="#50E6FF" stroke-width="1.5"/>
     <circle cx="22" cy="17" r="6" fill="#50E6FF"/>
@@ -107,9 +109,9 @@
     <g transform="translate(60,452)"><circle cx="6" cy="-5" r="6" fill="#0F6CBD"/><text x="22" y="0" font-weight="700">Least-privilege identity</text><text x="22" y="20" font-size="13" fill="#5A6B7B">Managed identity = Contributor on</text><text x="22" y="37" font-size="13" fill="#5A6B7B">THIS resource group only.</text></g>
     <g transform="translate(60,529)"><circle cx="6" cy="-5" r="6" fill="#0F6CBD"/><text x="22" y="0" font-weight="700">Private data tier</text><text x="22" y="20" font-size="13" fill="#5A6B7B">PostgreSQL has no public address.</text></g>
     <g transform="translate(60,589)"><circle cx="6" cy="-5" r="6" fill="#0F6CBD"/><text x="22" y="0" font-weight="700">Restricted ingress</text><text x="22" y="20" font-size="13" fill="#5A6B7B">Public access limited to ADMIN_CIDR.</text></g>
-    <g transform="translate(60,649)"><circle cx="6" cy="-5" r="6" fill="#0A8F8F"/><text x="22" y="0" font-weight="700">Closed-loop remediation — out of scope</text><text x="22" y="20" font-size="13" fill="#5A6B7B">Alerts fire but are not routed to the agent.</text><text x="22" y="37" font-size="13" fill="#5A6B7B">Wiring that loop is left to the operator.</text></g>
+    <g transform="translate(60,649)"><circle cx="6" cy="-5" r="6" fill="#0A8F8F"/><text x="22" y="0" font-weight="700">Closed-loop remediation</text><text x="22" y="20" font-size="13" fill="#5A6B7B">Dynatrace → ServiceNow → agent fixes it;</text><text x="22" y="37" font-size="13" fill="#5A6B7B">the incident resolves on recovery.</text></g>
     <g transform="translate(60,726)"><circle cx="6" cy="-5" r="6" fill="#0A8F8F"/><text x="22" y="0" font-weight="700">Injectable fault scenarios</text><text x="22" y="20" font-size="13" fill="#5A6B7B">Disk pressure, cert swaps, resource</text><text x="22" y="37" font-size="13" fill="#5A6B7B">burn, image swaps, node scaling.</text></g>
-    <g transform="translate(60,803)"><circle cx="6" cy="-5" r="6" fill="#0F6CBD"/><text x="22" y="0" font-weight="700">Full observability</text><text x="22" y="20" font-size="13" fill="#5A6B7B">App Insights + Container Insights →</text><text x="22" y="37" font-size="13" fill="#5A6B7B">Log Analytics → scheduled alerts.</text></g>
+    <g transform="translate(60,803)"><circle cx="6" cy="-5" r="6" fill="#0F6CBD"/><text x="22" y="0" font-weight="700">Dynatrace observability</text><text x="22" y="20" font-size="13" fill="#5A6B7B">OneAgent + sre_demo.* metrics;</text><text x="22" y="37" font-size="13" fill="#5A6B7B">Azure Monitor kept side by side.</text></g>
     <g transform="translate(60,880)"><circle cx="6" cy="-5" r="6" fill="#0F6CBD"/><text x="22" y="0" font-weight="700">Repeatable teardown</text><text x="22" y="20" font-size="13" fill="#5A6B7B">One suffix-named RG to create/destroy.</text></g>
   </g>
 
@@ -199,39 +201,51 @@
   <text x="1034" y="982" class="meta" font-weight="700" fill="#0A6E6E">THIS resource group</text>
   <text x="1034" y="1000" class="meta" font-weight="700" fill="#0A6E6E">only</text>
 
-  <!-- ===================== RIGHT: OBSERVABILITY + AGENT ===================== -->
-  <g filter="url(#sh)"><rect x="1300" y="150" width="420" height="520" rx="14" fill="#F7F3FD" stroke="#7A56C2" stroke-width="2"/></g>
+  <!-- ===================== RIGHT: DYNATRACE + SERVICENOW + AGENT ===================== -->
+  <!-- Dynatrace -->
+  <g filter="url(#sh)"><rect x="1300" y="150" width="420" height="388" rx="14" fill="#F7F3FD" stroke="#7A56C2" stroke-width="2"/></g>
   <rect x="1300" y="150" width="420" height="40" rx="14" fill="#7A56C2"/>
   <rect x="1300" y="170" width="420" height="20" fill="#7A56C2"/>
-  <text x="1322" y="177" class="zt" fill="#FFFFFF">Observability</text>
+  <text x="1322" y="177" class="zt" fill="#FFFFFF">Dynatrace</text>
+  <text x="1698" y="176" font-size="12.5" font-weight="600" fill="#EDE4FA" text-anchor="end">detect · route · investigate (MCP)</text>
 
-  <g filter="url(#sh)"><rect x="1322" y="210" width="184" height="92" rx="10" fill="#FFFFFF" stroke="#7A56C2" stroke-width="1.4"/></g>
-  <text x="1338" y="238" class="chipt" fill="#4A2E86">Application</text>
-  <text x="1338" y="258" class="chipt" fill="#4A2E86">Insights</text>
-  <text x="1338" y="282" class="meta">App VM + magic8ball</text>
+  <g filter="url(#sh)"><rect x="1322" y="206" width="184" height="76" rx="10" fill="#FFFFFF" stroke="#7A56C2" stroke-width="1.4"/></g>
+  <text x="1338" y="232" class="dtt">OneAgent</text>
+  <text x="1338" y="254" class="meta">VMs + AKS (DynaKube)</text>
+  <text x="1338" y="271" class="meta">host / k8s / logs</text>
+  <g filter="url(#sh)"><rect x="1518" y="206" width="182" height="76" rx="10" fill="#FFFFFF" stroke="#7A56C2" stroke-width="1.4"/></g>
+  <text x="1534" y="232" class="dtt">sre_demo.* metrics</text>
+  <text x="1534" y="254" class="meta">sent by the apps</text>
+  <text x="1534" y="271" class="meta">Metrics API v2</text>
 
-  <g filter="url(#sh)"><rect x="1518" y="210" width="182" height="92" rx="10" fill="#FFFFFF" stroke="#7A56C2" stroke-width="1.4"/></g>
-  <text x="1534" y="238" class="chipt" fill="#4A2E86">Container</text>
-  <text x="1534" y="258" class="chipt" fill="#4A2E86">Insights</text>
-  <text x="1534" y="282" class="meta">AKS cluster</text>
+  <g filter="url(#sh)"><rect x="1322" y="300" width="378" height="58" rx="10" fill="#FFFFFF" stroke="#C0392B" stroke-width="1.6"/></g>
+  <text x="1511" y="324" class="chipt" fill="#8E241A" text-anchor="middle">8 anomaly detectors → Davis problem</text>
+  <text x="1511" y="345" class="meta" text-anchor="middle">titled [sre-demo-&lt;suffix&gt;] · static thresholds</text>
 
-  <g filter="url(#sh)"><rect x="1360" y="336" width="300" height="82" rx="10" fill="#FFFFFF" stroke="#7A56C2" stroke-width="1.6"/></g>
-  <text x="1510" y="366" class="chipt" fill="#4A2E86" text-anchor="middle">Log Analytics workspace</text>
-  <text x="1510" y="392" class="meta" text-anchor="middle">Central query + correlation store</text>
+  <g filter="url(#sh)"><rect x="1322" y="376" width="378" height="76" rx="10" fill="#FFFFFF" stroke="#7A56C2" stroke-width="1.6"/></g>
+  <text x="1511" y="400" class="dtt" text-anchor="middle">Workflow · sre-demo-&lt;suffix&gt;-servicenow</text>
+  <text x="1511" y="421" class="meta" text-anchor="middle">fires on problem open &amp; close (lab prefix only)</text>
+  <text x="1511" y="439" class="meta" text-anchor="middle">ServiceNow password from the credential vault</text>
 
-  <g filter="url(#sh)"><rect x="1360" y="452" width="300" height="92" rx="10" fill="#FFFFFF" stroke="#C0392B" stroke-width="1.6"/></g>
-  <text x="1510" y="482" class="chipt" fill="#8E241A" text-anchor="middle">7 scheduled query alert rules</text>
-  <text x="1510" y="508" class="meta" text-anchor="middle">Detect disk pressure, burn, cert &amp;</text>
-  <text x="1510" y="525" class="meta" text-anchor="middle">availability faults → fire signals</text>
+  <g filter="url(#sh)"><rect x="1484" y="468" width="216" height="56" rx="10" fill="#FFFFFF" stroke="#7A56C2" stroke-width="1.4"/></g>
+  <text x="1498" y="492" class="dtt">Remote MCP gateway</text>
+  <text x="1498" y="512" class="meta">problems · DQL · logs · k8s</text>
 
-  <text x="1322" y="588" class="meta" fill="#4A2E86">Telemetry pipeline</text>
-  <text x="1322" y="612" font-size="13" fill="#5A6B7B">Apps &amp; cluster emit metrics/logs →</text>
-  <text x="1322" y="631" font-size="13" fill="#5A6B7B">Log Analytics → alert rules evaluate →</text>
-  <text x="1322" y="650" font-size="13" fill="#5A6B7B">signals available to the SRE Agent.</text>
+  <!-- ServiceNow -->
+  <g filter="url(#sh)"><rect x="1300" y="560" width="420" height="132" rx="14" fill="#EEF5F2" stroke="#293E40" stroke-width="2"/></g>
+  <rect x="1300" y="560" width="420" height="38" rx="14" fill="#293E40"/>
+  <rect x="1300" y="580" width="420" height="18" fill="#293E40"/>
+  <text x="1322" y="586" class="zt" fill="#FFFFFF">ServiceNow</text>
+  <circle cx="1440" cy="580" r="6" fill="#62D84E"/>
+  <text x="1698" y="585" font-size="12.5" font-weight="600" fill="#CFE8DD" text-anchor="end">incident platform</text>
+  <g filter="url(#sh)"><rect x="1322" y="608" width="378" height="72" rx="10" fill="#FFFFFF" stroke="#293E40" stroke-width="1.4"/></g>
+  <text x="1338" y="630" class="snt">Incident · priority 2 (impact 2, urgency 1)</text>
+  <text x="1338" y="650" class="meta">group SRE Demo Lab · correlation_id dynatrace-&lt;id&gt;</text>
+  <text x="1338" y="668" class="meta">integration user: itil, web-service access only</text>
 
   <!-- SRE Agent hero -->
-  <g filter="url(#sh)"><rect x="1300" y="700" width="420" height="240" rx="16" fill="url(#agentg)"/></g>
-  <g transform="translate(1330,738) scale(1.875)">
+  <g filter="url(#sh)"><rect x="1300" y="720" width="420" height="240" rx="16" fill="url(#agentg)"/></g>
+  <g transform="translate(1330,758) scale(1.875)">
     <path d="M28.286 10.394L25.218 11.794L18.166 8.58C16.778 7.946 15.226 7.946 13.838 8.58L12.216 9.32C11.33 9.726 10.746 10.706 10.746 11.794C10.746 12.888 11.33 13.868 12.216 14.274L6.78595 11.794L3.71795 10.394C2.57395 9.874 2.00195 8.76 2.00195 7.64C2.00195 6.526 2.57395 5.414 3.71795 4.886L12.99 0.66C14.914 -0.22 17.09 -0.22 19.01 0.66L28.286 4.886C30.572 5.932 30.572 9.354 28.286 10.394Z" fill="url(#paint0_linear_2645_421)"/>
     <path d="M30 24.36C30 25.474 29.428 26.586 28.286 27.114L19.01 31.34C17.086 32.22 14.91 32.22 12.99 31.34L3.71401 27.114C1.42801 26.068 1.42801 22.648 3.71401 21.608L6.89401 20.154L13.836 23.32C15.224 23.954 16.776 23.954 18.164 23.32L19.674 22.634C20.56 22.228 21.144 21.248 21.144 20.154C21.144 19.06 20.56 18.08 19.674 17.68L25.104 20.16H25.11L28.284 21.606C29.428 22.126 29.998 23.24 29.998 24.36H30Z" fill="url(#paint1_linear_2645_421)"/>
     <path d="M30 24.36C30 25.474 29.428 26.586 28.286 27.114L19.01 31.34C17.086 32.22 14.91 32.22 12.99 31.34L3.71401 27.114C1.42801 26.068 1.42801 22.648 3.71401 21.608L6.89401 20.154L13.836 23.32C15.224 23.954 16.776 23.954 18.164 23.32L19.674 22.634C20.56 22.228 21.144 21.248 21.144 20.154C21.144 19.06 20.56 18.08 19.674 17.68L25.104 20.16H25.11L28.284 21.606C29.428 22.126 29.998 23.24 29.998 24.36H30Z" fill="url(#paint2_radial_2645_421)"/>
@@ -240,13 +254,13 @@
     <path d="M30.0001 15.946V24.36C30.0001 23.24 29.4281 22.126 28.2861 21.606L25.1121 20.16H25.1061L19.6761 17.68L16.0021 16L12.2161 14.274C11.3301 13.868 10.7461 12.888 10.7461 11.794C10.7461 10.708 11.3301 9.72799 12.2161 9.31999L13.8381 8.57999C15.2261 7.94599 16.7781 7.94599 18.1661 8.57999L25.2181 11.794L28.2861 13.194C29.4301 13.72 30.0001 14.832 30.0001 15.946Z" fill="url(#paint5_linear_2645_421)"/>
     <path d="M30.0001 15.946V24.36C30.0001 23.24 29.4281 22.126 28.2861 21.606L25.1121 20.16H25.1061L19.6761 17.68L16.0021 16L12.2161 14.274C11.3301 13.868 10.7461 12.888 10.7461 11.794C10.7461 10.708 11.3301 9.72799 12.2161 9.31999L13.8381 8.57999C15.2261 7.94599 16.7781 7.94599 18.1661 8.57999L25.2181 11.794L28.2861 13.194C29.4301 13.72 30.0001 14.832 30.0001 15.946Z" fill="url(#paint6_linear_2645_421)"/>
   </g>
-  <text x="1410" y="760" fill="#FFFFFF" font-size="24" font-weight="700">Azure SRE Agent</text>
-  <text x="1410" y="786" fill="#DFF6FA" font-size="14">Managed reliability service</text>
+  <text x="1410" y="780" fill="#FFFFFF" font-size="24" font-weight="700">Azure SRE Agent</text>
+  <text x="1410" y="806" fill="#DFF6FA" font-size="14">Managed reliability service</text>
   <g font-size="14.5" fill="#FFFFFF">
-    <text x="1330" y="836">① Ingests alert signals + telemetry</text>
-    <text x="1330" y="864">② Investigates root cause with context</text>
-    <text x="1330" y="892">③ Remediates via ARM (scoped to the RG)</text>
-    <text x="1330" y="920" font-weight="700" fill="#EAFBFF">Human-in-the-loop approval optional</text>
+    <text x="1330" y="852">① Picks up P1–P2 ServiceNow incidents</text>
+    <text x="1330" y="878">② Investigates via Dynatrace MCP + Azure</text>
+    <text x="1330" y="904">③ Remediates via ARM (scoped to the RG)</text>
+    <text x="1330" y="934" font-weight="700" fill="#EAFBFF">Autonomous, or review mode for approval</text>
   </g>
 
   <!-- ===================== CONNECTORS ===================== -->
@@ -270,31 +284,49 @@
   <path class="flow" marker-end="url(#arw)" d="M542,648 C560,690 600,712 662,730"/>
   <rect x="566" y="672" width="80" height="20" rx="10" fill="#FFFFFF" stroke="#0F6CBD" stroke-width="1"/><text x="606" y="686" class="lbl" text-anchor="middle">TCP 5432</text>
 
-  <!-- Telemetry: App VM -> App Insights -->
-  <path class="tele" marker-end="url(#arwt)" d="M976,330 C1140,300 1200,270 1420,300"/>
-  <text x="1120" y="292" class="lblt" text-anchor="middle">traces · metrics</text>
+  <!-- Telemetry: App VM -> Dynatrace -->
+  <path class="tele" marker-end="url(#arwt)" d="M976,330 C1120,320 1200,250 1318,244"/>
+  <text x="1100" y="282" class="lblt" text-anchor="middle">OneAgent · metrics</text>
+  <!-- Telemetry: AKS -> Dynatrace -->
+  <path class="tele" marker-end="url(#arwt)" d="M976,520 C1160,500 1220,300 1318,266"/>
+  <text x="1080" y="472" class="lblt" text-anchor="middle">DynaKube · logs · metrics</text>
 
-  <!-- Telemetry: AKS -> Container Insights -->
-  <path class="tele" marker-end="url(#arwt)" d="M976,520 C1180,470 1300,360 1560,304"/>
-  <text x="1200" y="452" class="lblt" text-anchor="middle">logs · metrics</text>
+  <!-- inside Dynatrace -->
+  <path class="tele" marker-end="url(#arwt)" d="M1414,282 L1440,298"/>
+  <path class="tele" marker-end="url(#arwt)" d="M1609,282 L1582,298"/>
+  <path class="tele" marker-end="url(#arwt)" d="M1511,358 L1511,374"/>
 
-  <!-- App Insights -> LAW -->
-  <path class="tele" marker-end="url(#arwt)" d="M1414,302 C1414,320 1440,330 1470,334"/>
-  <!-- Container Insights -> LAW -->
-  <path class="tele" marker-end="url(#arwt)" d="M1609,302 C1609,320 1580,330 1552,334"/>
-  <!-- LAW -> Alerts -->
-  <path class="tele" marker-end="url(#arwt)" d="M1510,418 L1510,450"/>
-  <!-- Alerts -> SRE Agent (signal) -->
-  <path class="ctrl" marker-end="url(#arwc)" d="M1510,544 L1510,698"/>
-  <rect x="1456" y="606" width="108" height="22" rx="11" fill="#FFFFFF" stroke="#0A8F8F" stroke-width="1.2"/><text x="1510" y="621" class="lblc" text-anchor="middle">alert signal</text>
+  <!-- Workflow -> ServiceNow incident -->
+  <path class="ctrl" marker-end="url(#arwc)" d="M1466,452 L1466,604"/>
+  <rect x="1340" y="500" width="114" height="22" rx="11" fill="#FFFFFF" stroke="#0A8F8F" stroke-width="1.2"/><text x="1397" y="515" class="lblc" text-anchor="middle">create · resolve</text>
+
+  <!-- ServiceNow <-> SRE Agent -->
+  <path class="ctrl" marker-start="url(#arwc)" marker-end="url(#arwc)" d="M1450,684 L1450,716"/>
+  <rect x="1470" y="694" width="230" height="22" rx="11" fill="#FFFFFF" stroke="#0A8F8F" stroke-width="1.2"/><text x="1585" y="709" class="lblc" text-anchor="middle">response plan · findings → notes</text>
+
+  <!-- SRE Agent -> Dynatrace MCP -->
+  <path class="ctrl" marker-end="url(#arwc)" d="M1720,800 C1738,800 1740,786 1740,770 L1740,520 C1740,498 1728,496 1704,496"/>
+  <text transform="translate(1756,700) rotate(-90)" class="lblc" text-anchor="middle">query via MCP</text>
 
   <!-- SRE Agent -> Resource group (investigate/remediate loop) -->
-  <path class="ctrl" marker-end="url(#arwc)" d="M1300,806 C1120,806 1140,470 1262,470"/>
-  <rect x="1096" y="646" width="236" height="26" rx="13" fill="#E7F7F7" stroke="#0A8F8F" stroke-width="1.4"/>
-  <text x="1214" y="664" class="lblc" text-anchor="middle">investigate · remediate (ARM)</text>
+  <path class="ctrl" marker-end="url(#arwc)" d="M1300,826 C1120,826 1140,470 1262,470"/>
+  <rect x="1076" y="636" width="212" height="26" rx="13" fill="#E7F7F7" stroke="#0A8F8F" stroke-width="1.4"/>
+  <text x="1182" y="654" class="lblc" text-anchor="middle">investigate · remediate (ARM)</text>
 
   <!-- App VM -> ARM/RG boundary control -->
   <path class="ctrl" marker-end="url(#arwc)" d="M976,360 C1030,360 1040,414 1016,430" opacity="0.0"/>
+
+  <!-- Azure Monitor, kept side by side -->
+  <g filter="url(#sh)"><rect x="40" y="962" width="300" height="200" rx="14" fill="#FFFFFF" stroke="#8FA3B8" stroke-width="1.5" stroke-dasharray="6 4"/></g>
+  <text x="60" y="992" class="title">Azure Monitor (side by side)</text>
+  <g font-size="13" fill="#5A6B7B">
+    <text x="60" y="1018">App Insights · Container Insights</text>
+    <text x="60" y="1037">→ Log Analytics → 7 alert rules</text>
+    <text x="60" y="1066">Still fires and shows in the portal for</text>
+    <text x="60" y="1085">comparison, but is no longer the</text>
+    <text x="60" y="1104">agent's incident source.</text>
+  </g>
+  <text x="60" y="1136" font-size="12" font-weight="600" fill="#4A6178">Only one incident platform per agent.</text>
 
   <!-- ===================== LEGEND ===================== -->
   <g filter="url(#sh)"><rect x="380" y="1066" width="1340" height="96" rx="12" fill="#FFFFFF" stroke="#CBD8E6" stroke-width="1.4"/></g>
@@ -304,16 +336,17 @@
   <text x="470" y="1127" font-size="13.5" fill="#22384C">User / data traffic (HTTP, 5432, tokens)</text>
 
   <line x1="820" y1="1122" x2="868" y2="1122" stroke="#7A56C2" stroke-width="3" stroke-dasharray="5 5"/><polygon points="868,1117 878,1122 868,1127" fill="#7A56C2"/>
-  <text x="886" y="1127" font-size="13.5" fill="#22384C">Telemetry (metrics, logs → Log Analytics)</text>
+  <text x="886" y="1127" font-size="13.5" fill="#22384C">Telemetry (OneAgent, metrics, logs → Dynatrace)</text>
 
   <line x1="1250" y1="1122" x2="1298" y2="1122" stroke="#0A8F8F" stroke-width="3.4"/><polygon points="1298,1116 1310,1122 1298,1128" fill="#0A8F8F"/>
-  <text x="1318" y="1127" font-size="13.5" fill="#22384C">Control / remediation (SRE Agent, ARM)</text>
+  <text x="1318" y="1127" font-size="13.5" fill="#22384C">Incident &amp; control (workflow, agent, MCP, ARM)</text>
 
   <!-- zone swatches -->
   <rect x="404" y="1140" width="16" height="14" rx="3" fill="#FFF7EA" stroke="#E0A63C"/><text x="428" y="1152" font-size="12.5" fill="#22384C">Internet (ADMIN_CIDR)</text>
   <rect x="600" y="1140" width="16" height="14" rx="3" fill="#EFF6FD" stroke="#106EBE"/><text x="624" y="1152" font-size="12.5" fill="#22384C">VNet / subnets</text>
   <rect x="760" y="1140" width="16" height="14" rx="3" fill="#F2FAF5" stroke="#2E9E6B"/><text x="784" y="1152" font-size="12.5" fill="#22384C">AKS workloads</text>
   <rect x="912" y="1140" width="16" height="14" rx="3" fill="#FDECEC" stroke="#C0392B"/><text x="936" y="1152" font-size="12.5" fill="#22384C">Private database</text>
-  <rect x="1076" y="1140" width="16" height="14" rx="3" fill="#F7F3FD" stroke="#7A56C2"/><text x="1100" y="1152" font-size="12.5" fill="#22384C">Observability</text>
-  <rect x="1230" y="1140" width="16" height="14" rx="3" fill="#0A9E9E"/><text x="1254" y="1152" font-size="12.5" fill="#22384C">Azure SRE Agent (managed service)</text>
+  <rect x="1076" y="1140" width="16" height="14" rx="3" fill="#F7F3FD" stroke="#7A56C2"/><text x="1100" y="1152" font-size="12.5" fill="#22384C">Dynatrace</text>
+  <rect x="1200" y="1140" width="16" height="14" rx="3" fill="#EEF5F2" stroke="#293E40"/><text x="1224" y="1152" font-size="12.5" fill="#22384C">ServiceNow</text>
+  <rect x="1336" y="1140" width="16" height="14" rx="3" fill="#0A9E9E"/><text x="1360" y="1152" font-size="12.5" fill="#22384C">Azure SRE Agent (managed service)</text>
 </svg>
