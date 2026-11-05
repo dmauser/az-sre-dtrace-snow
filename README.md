@@ -74,11 +74,12 @@ themselves, or use to train an on-call team.
 
 ![Azure SRE Agent demo lab architecture](docs/sre-demo-architecture.svg)
 
-> **Scope.** The lab delivers the observe → detect → investigate half: real faults, real
-> telemetry, and 7 alert rules that genuinely fire. Routing those alerts into the agent so it
-> remediates automatically — the closed loop — is **out of scope**. The alert rules are created
-> with no action groups, and connecting them is left to the operator. See
-> [Azure SRE Agent setup](#azure-sre-agent-setup).
+> **Closed loop.** Dynatrace detects the fault and its workflow opens a ServiceNow incident.
+> The SRE Agent picks up that incident, investigates through the Dynatrace MCP server and
+> Azure, then remediates through its managed identity. When the problem clears, the workflow
+> resolves the incident. Azure Monitor (App Insights, Log Analytics, 7 alert rules) still runs
+> side by side for comparison. However, it is no longer the agent's incident source. See
+> [How it works](#how-it-works).
 
 <details>
 <summary>Logical view (Mermaid)</summary>
@@ -87,8 +88,9 @@ themselves, or use to train an on-call team.
 flowchart TB
     subgraph internet ["Internet — restricted to ADMIN_CIDR"]
         operator["Operator / demonstrator"]
-        agent["Azure SRE Agent"]
     end
+
+    agent["Azure SRE Agent<br/>Autonomous · managed identity"]
 
     subgraph rg ["Resource group: rg-sre-demo-&lt;suffix&gt;"]
         subgraph vnet ["VNet 10.20.0.0/16"]
@@ -111,11 +113,19 @@ flowchart TB
         mi["Managed identity<br/>Contributor on THIS resource group only"]
     end
 
-    subgraph obs ["Observability"]
-        law["Log Analytics workspace"]
-        appi["Application Insights"]
-        ci["Container Insights"]
-        alerts["7 scheduled query alert rules"]
+    subgraph dt ["Dynatrace"]
+        oa["OneAgent (VMs) · DynaKube (AKS)<br/>+ sre_demo.* metrics"]
+        det["8 anomaly detectors → Davis problem<br/>title prefix [sre-demo-&lt;suffix&gt;]"]
+        wf["Workflow sre-demo-&lt;suffix&gt;-servicenow<br/>on problem open &amp; close"]
+        mcp["Remote MCP gateway"]
+    end
+
+    subgraph sn ["ServiceNow"]
+        inc["Incident · P2<br/>group 'SRE Demo Lab'<br/>correlation_id dynatrace-&lt;id&gt;"]
+    end
+
+    subgraph azmon ["Azure Monitor (side by side)"]
+        law["App Insights · Container Insights<br/>→ Log Analytics → 7 alert rules"]
     end
 
     operator -->|"HTTP 8080"| appvm
@@ -129,14 +139,13 @@ flowchart TB
     appvm --> acr
     appvm --> kv
 
-    appvm --> appi
-    m8 --> appi
-    aks --> ci
-    appi --> law
-    ci --> law
-    law --> alerts
-    alerts -.->|"not wired (out of scope)"| agent
-    agent -.->|"investigate · remediate (out of scope)"| rg
+    vnet -.->|"OneAgent · DynaKube · metrics"| oa
+    oa -.-> det --> wf
+    wf -->|"create · resolve (Table API)"| inc
+    inc <-->|"response plan P1–P2 · findings → work notes"| agent
+    agent -->|"query via MCP"| mcp
+    agent -->|"investigate · remediate (ARM, managed identity)"| rg
+    vnet -.-> law
 ```
 </details>
 
